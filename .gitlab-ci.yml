@@ -1,0 +1,239 @@
+####################################################
+# By default, use the current production image hosted
+# in the GitLab repo's container registry.
+# This image can be overriden by job-specific images.
+####################################################
+image: $CI_REGISTRY_IMAGE:production
+
+cache:
+  key: ${CI_COMMIT_REF_NAME}
+  paths:
+    - .sfdx/
+
+stages: 
+  - branchPurge
+  - sourceApiVersion
+  - build
+  - quality
+  - develop
+  - fullqa
+  - production
+
+variables:
+  DEPLOY_TIMEOUT: 240
+  DEPLOY_LOG: deploy_log.txt
+  DEPLOY_PACKAGE: deploy.xml
+
+####################################################
+# Announcing the commencement of the monthly branch Purge
+# sanctioned by your release manager.
+####################################################
+branchPurge:
+  stage: branchPurge
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+  allow_failure: true
+  script:
+    - source ./delete_merged_branches.sh
+  tags: 
+    - micro
+
+####################################################
+# Check the org's API version and update if a newer version is available.
+# This job will run on a schedule and is allowed to fail.
+####################################################
+sourceApiVersion:
+  stage: sourceApiVersion
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: always
+  allow_failure: true
+  script:
+    - version=$(python3 ./api_version.py)
+    - source ./push_api_updates.sh
+  tags: 
+    - micro
+
+####################################################
+# Build a Docker image for the org.
+####################################################
+build:
+  image: docker:20.10.16
+  stage: build
+  services:
+    - docker:20.10.16-dind  
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa'
+      changes:
+        - Dockerfile
+      when: always
+  allow_failure: false
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    DOCKER_HOST: tcp://docker:2376 #Necessary for k8s
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  # wait until docker in docker service is ready
+  before_script:
+    - until docker info; do sleep 1; done
+  script:
+    - if [ $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH ]; then IMAGE_TAG=$CI_REGISTRY_IMAGE:production; fi
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER $CI_REGISTRY --password-stdin
+    - docker build --tag $IMAGE_TAG .
+    - docker push $IMAGE_TAG
+  tags: 
+    - micro
+
+####################################################
+# Run SonarQube to analyze changes to the code base.
+####################################################
+quality:
+  image:
+    name: sonarsource/sonar-scanner-cli:latest
+  stage: quality
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa'
+      changes:
+        - 'force-app/**/*'
+      variables:
+        REF_NAME: $CI_COMMIT_REF_NAME
+      when: always
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME  == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME  == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME  == 'fullqa'
+      changes:
+        - 'force-app/**/*'
+      variables:
+        REF_NAME: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+      when: always
+    - when: never
+  allow_failure: true
+  variables:
+    SONAR_USER_HOME: '${CI_PROJECT_DIR}/.sonar'
+    GIT_DEPTH: '0'
+    SONAR_LOGIN: $SONAR_TOKEN
+    SONAR_HOST_URL: $SONAR_URL
+    SONAR_GATE: 'false'
+  cache:
+    key: $CI_JOB_NAME
+    paths:
+      - .sonar/cache
+  script:
+    - sonar-scanner -Dsonar.qualitygate.wait=$SONAR_GATE -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG -Dsonar.gitlab.ref_name=$REF_NAME -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
+  # Ensure runners have enough memory if you are scanning a large repo
+  tags:
+    - macro
+
+####################################################
+# Validate metadata in a Salesforce org.
+####################################################
+.validate:
+  before_script:
+    # Copy version JSON output for any Salesforce cases
+    - sf version --verbose --json
+    - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -c $DEPLOY_PACKAGE
+    - testclasses=$(python3 ./apex_tests.py --tests "$CI_COMMIT_MESSAGE" --manifest $DEPLOY_PACKAGE)
+    - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - source_folder=$(python3 ./check_package_dir.py)
+    # validate and quick-deploy apex packages on push pipelines
+    # validate all packages on merge request pipelines
+    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --validate --log $DEPLOY_LOG --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
+
+####################################################
+# Deploy metadata into a Salesforce org.
+####################################################
+.deploy:
+  extends: .validate
+  script:
+    # only validate if it's a merge request pipeline
+    - if [ $CI_PIPELINE_SOURCE == "merge_request_event" ]; then exit 0; fi
+    # deploy non-apex packages
+    - if [ "$testclasses" == "not a test" ];
+      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG; fi
+  after_script:
+    - rm $DEPLOY_PACKAGE
+    - rm $DEPLOY_LOG
+
+####################################################
+# Define configuration settings for the develop org.
+####################################################
+develop:
+  image: $CI_REGISTRY_IMAGE:develop
+  resource_group: develop
+  extends: .deploy
+  stage: develop
+  variables:
+    AUTH_ALIAS: DEVELOP
+    AUTH_URL: $DEVELOP_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $DEVELOP_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      when: manual
+    - if: $CI_COMMIT_REF_NAME == 'develop'
+      when: always
+  allow_failure: false
+  environment:
+    name: develop
+    url: https://dev.sandbox.my.salesforce.com
+  tags:
+    - micro
+
+####################################################
+# Define configuration settings for the fullqa org.
+####################################################
+fullqa:
+  image: $CI_REGISTRY_IMAGE:fullqa
+  resource_group: fullqa
+  extends: .deploy
+  stage: fullqa
+  variables:
+    AUTH_ALIAS: FULLQA
+    AUTH_URL: $FULLQA_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $FULLQA_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
+      when: manual
+    - if: $CI_COMMIT_REF_NAME == 'fullqa'
+      when: always
+  allow_failure: false
+  environment:
+    name: fullqa
+    url: https://fullqa.sandbox.my.salesforce.com
+  tags:
+    - micro
+
+####################################################
+# Define configuration settings for the production org.
+####################################################
+production:
+  resource_group: production
+  extends: .deploy
+  stage: production
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $PRODUCTION_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      when: always
+  allow_failure: false
+  environment:
+    name: production
+    url: https://my.salesforce.com
+  tags:
+    - micro
