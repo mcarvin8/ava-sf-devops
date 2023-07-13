@@ -3,10 +3,11 @@
 """
 import argparse
 import logging
+import re
+import subprocess
 import sys
 import threading
 
-import deploy_functions
 
 # format logger
 logging.basicConfig(format='%(message)s', level=logging.DEBUG)
@@ -39,16 +40,35 @@ def parse_args():
     return args
 
 
+def run_command(cmd):
+    """
+        Function to run the command using the native shell.
+    """
+    try:
+        subprocess.run(cmd, check=True, shell=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+
+
 def create_sf_link(sf_env, log, result):
     """
         Function to check the deploy log for the ID
         and build the URL.
     """
+    pattern = r'Deploy ID: (.*)'
     classic_sf_path = '/changemgmt/monitorDeploymentsDetails.apexp?retURL=' +\
                         '/changemgmt/monitorDeployment.apexp&asyncId='
 
     # keep reading the log until the ID has been found
-    deploy_id = deploy_functions.find_deploy_id(log)
+    deploy_id = None
+    with open(log, 'r', encoding='utf-8') as deploy_file:
+        while True:
+            file_line = deploy_file.readline()
+            match = re.search(pattern, file_line)
+            # if regex is found, build the link and break the loop
+            if match:
+                deploy_id = match.group(1)
+                break
 
     if deploy_id:
         sf_id = deploy_id[:-3]
@@ -65,7 +85,7 @@ def quick_deploy(deploy_id, wait):
     command = f'sf project deploy quick -i {deploy_id} -w {wait}'
     logging.info(command)
     logging.info('Running the quick-deployment.')
-    deploy_functions.run_command(command)
+    run_command(command)
 
 
 def main(testclasses, manifest, wait, environment, log, pipeline, validate, debug):
@@ -103,7 +123,7 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     read_thread.start()
     logging.info('Running the validation.' if validate else 'Running the deployment.')
     logging.info('Please open the URL to view real-time progress.')
-    deploy_functions.run_command(command)
+    run_command(command)
     # run quick-deploy on push pipelines that validate
     if validate and pipeline == 'push':
         quick_deploy(result.get('deploy_id'), wait)

@@ -6,9 +6,10 @@
 import argparse
 import logging
 import os
+import subprocess
+import sys
 
 # import local scripts
-import deploy_functions
 import parse_package_file
 import package_template
 
@@ -36,6 +37,16 @@ def parse_args():
     return args
 
 
+def run_command(cmd):
+    """
+        Function to run the command using the native shell.
+    """
+    try:
+        subprocess.run(cmd, check=True, shell=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
+
+
 def create_changes_dict(from_ref, to_ref, output, delta, manifest):
     """
         Run the plugin to create the delta file
@@ -43,7 +54,7 @@ def create_changes_dict(from_ref, to_ref, output, delta, manifest):
         to a dictionary.
     """
     os.mkdir(output)
-    deploy_functions.run_command(f'sf sgd:source:delta --to "{to_ref}"'
+    run_command(f'sf sgd:source:delta --to "{to_ref}"'
                 f' --from "{from_ref}" --output "{output}/" --generate-delta')
     # initialize changes dictionary
     changed = {}

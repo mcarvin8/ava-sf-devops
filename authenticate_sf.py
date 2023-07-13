@@ -5,8 +5,9 @@ import argparse
 import logging
 import os
 import tempfile
+import subprocess
+import sys
 
-import deploy_functions
 
 # Format logger
 logging.basicConfig(format='%(message)s', level=logging.DEBUG)
@@ -23,6 +24,16 @@ def parse_args():
     parser.add_argument('-u', '--url')
     args = parser.parse_args()
     return args
+
+
+def run_command(cmd):
+    """
+        Function to run the command using the native shell.
+    """
+    try:
+        subprocess.run(cmd, check=True, shell=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 def make_temp_file(url):
@@ -52,7 +63,7 @@ def main(alias, url):
     # Run each command one after the other
     for command in commands:
         logging.info(command)
-        deploy_functions.run_command(command)
+        run_command(command)
 
     # Delete the temporary file
     os.unlink(url_file)
