@@ -126,7 +126,7 @@ quality:
   after_script:
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
-    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" -hook "$SLACK_WEBHOOK_URL"
+    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --hook "$SLACK_WEBHOOK_URL"
 
 ####################################################
 # Define configuration settings for the develop org.
