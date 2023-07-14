@@ -1,16 +1,14 @@
 # Salesforce Org Model for GitLab CI/CD using the SF Executable
-This repository contains Python and Bash scripts that demonstrate how to use GitLab actions to deploy metadata in a Salesforce org, following the org development model without using packages/scratch orgs.
+This repository contains Python scripts that demonstrate how to use GitLab actions to deploy metadata in a Salesforce org, following the org development model without using packages/scratch orgs. Each Salesforce org has its own long-running Git branch.
 
 ## Dependencies
 
-The Dockerfile will install the SF executable and Git on top of Ubuntu. Ubuntu already has Python 3 installed.
+The Dockerfile will install the latest SF CLI, Git, Python 3, and the SDFX Git Delta plugin on top of Alpine.
 
 ## YML Stages
 
 The pipeline is divided into several stages:
 
-- The `branchPurge` and `sourceApiVersion` jobs are scheduled jobs designed to be run independently of the other jobs and both jobs will use the GitLab API to push updates back to the repository. The `branchPurge` job will delete merged branches from the repository. The `sourceApiVersion` job will check for the latest Metadata API version available in the Salesforce org. If the sfdx-project.json file has an older API version, the job will create a new branch from the current branch and then update the JSON file to use the latest API version. Once this branch is pushed to GitLab, a merge request will be created into the default branch.
-    - Note: A scheduled pipeline should be configured to run against each org branch since sandbox orgs receive newer API versions before production orgs.
 - The `build` job builds a Docker image for the org if the Dockerfile has been modified. This Docker image is pushed to the GitLab Container Registry for the repository.
 - The `quality` job runs a SonarQube scan of the repository if there are changes to the metadata directory. This assumes that your org has been configured with SonarQube with your GitLab instance. Ensure Pull Request decoration is enabled for your repository to enable SonarQube comments on merge requests. Ensure MR pipelines are enabled to run this scan when MRs are open into the target branch.
 - The `develop`, `fullqa`, and `production` jobs represents 3 different Salesforce orgs linked to separate branches. When a merge request is opened with one of these branches as the target branch, a manually triggered pipeline will be created to validate the metadata in the org. When the branch is directly pushed to, a pipeline will automatically run to validate and quick-deploy the metadata to the org if there are Apex components in the package. If no Apex testing is required for the metadata, the validation will be skipped, and a full deployment will run. The org job can be copied multiple times depending on how many Salesforce orgs you would like to track in this repository.

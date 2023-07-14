@@ -11,8 +11,6 @@ cache:
     - .sfdx/
 
 stages: 
-  - branchPurge
-  - sourceApiVersion
   - build
   - quality
   - develop
@@ -23,37 +21,6 @@ variables:
   DEPLOY_TIMEOUT: 240
   DEPLOY_LOG: deploy_log.txt
   DEPLOY_PACKAGE: deploy.xml
-
-####################################################
-# Announcing the commencement of the monthly branch Purge
-# sanctioned by your release manager.
-####################################################
-branchPurge:
-  stage: branchPurge
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: always
-  allow_failure: true
-  script:
-    - source ./delete_merged_branches.sh
-  tags: 
-    - micro
-
-####################################################
-# Check the org's API version and update if a newer version is available.
-# This job will run on a schedule and is allowed to fail.
-####################################################
-sourceApiVersion:
-  stage: sourceApiVersion
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: always
-  allow_failure: true
-  script:
-    - version=$(python3 ./api_version.py)
-    - source ./push_api_updates.sh
-  tags: 
-    - micro
 
 ####################################################
 # Build a Docker image for the org.

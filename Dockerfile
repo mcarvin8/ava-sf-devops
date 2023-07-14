@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM alpine:latest
 
 # Set Salesforce CLI Environment Variables
 ENV SF_AUTOUPDATE_DISABLE=true \
@@ -15,10 +15,9 @@ ENV SF_AUTOUPDATE_DISABLE=true \
     SF_PROJECT_AUTOUPDATE_DISABLE_FOR_PACKAGE_VERSION_CREATE=true
     # ^-- For force:package:version:create, disables automatic updates to the sfdx-project.json file.
 
-# Install nodejs, Salesforce CLI, git, sfdx-git-delta, and output versions
-RUN apt-get update && apt-get install -y curl git && \
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
-    apt-get install -y nodejs && \
+# Install dependencies and output versions
+RUN apk update && apk upgrade && \
+    apk add --no-cache curl git python3 nodejs npm && \
     npm install --global @salesforce/cli@latest && \
     echo y | sf plugins:install sfdx-git-delta && \
     sf version --verbose --json && \
