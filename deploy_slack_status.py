@@ -6,10 +6,6 @@ import json
 import urllib.request
 
 
-# Update webhook URL here for your slack channel
-SLACK_WEBHOOK_URL = "https://hooks.slack.com/services/"
-
-
 def parse_args():
     """
         Function to parse required arguments.
@@ -21,6 +17,7 @@ def parse_args():
     parser.add_argument('-j', '--job')
     parser.add_argument('-c', '--commit')
     parser.add_argument('-e', '--environment')
+    parser.add_argument('-h', '--hook')
     args = parser.parse_args()
     return args
 
@@ -75,11 +72,10 @@ def print_slack_summary_build(user, environment, commit, project, status, job):
     return json.dumps(slack_msg_body)
 
 
-def share_slack_update_build(payload_info):
+def share_slack_update_build(payload_info, slack_webhook):
     """
         Post to slack channel
     """
-    slack_webhook = SLACK_WEBHOOK_URL
     data = {"payload": payload_info}
     data_encoded = urllib.parse.urlencode(data).encode("utf-8")
     request = urllib.request.Request(slack_webhook, data=data_encoded, method="POST")
@@ -87,15 +83,16 @@ def share_slack_update_build(payload_info):
         pass
 
 
-def main(user, environment, commit, project, status, job):
+def main(user, environment, commit, project, status, job, hook):
     """
         Main function
     """
     payload_info = print_slack_summary_build(user, environment, commit, project, status, job)
-    share_slack_update_build(payload_info)
+    share_slack_update_build(payload_info, hook)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
     main(inputs.user, inputs.environment, inputs.commit,
-         inputs.project, inputs.status, inputs.job)
+         inputs.project, inputs.status, inputs.job,
+         inputs.hook)
