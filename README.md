@@ -21,11 +21,41 @@ This org model uses a manifest file (package.xml) to run delta deployments.
 
 By default, the SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
 
-A manual package.xml file (manifest/package.xml) will be kept in this repository as a backup to allow the developer to declare any metadata that would not be covered by the diff between the current commit and the previous commit. Add metadata types to this file to deploy metadata already on the branch. Otherwise, clear all metadata types from this file to rely entirely on the package.xml created from the SFDX git delta plugin.
+As a backup measure, the GitLab Merge Request description will be parsed via the merge commit message to look for package.xml contents.
 
-The Python script will merge metadata types from the plugin manifest file and the manual manifest file to create the final deployment package.
+The package.xml contents in the Merge Request should be used to declare any metadata that would not be covered by the diff between the current commit and the previous commit.
 
-Note that the final deployment package cannot contain wildcard characters for delta deployments. If a metadata type contains a wildcard, the type will not be added to the final deployment package.
+The following updates must be made to your GitLab repository:
+- The default merge commit message should be updated to include the description of the MR for UI merges.
+```
+Merge branch '%{source_branch}' into '%{target_branch}'
+
+%{title}
+
+%{description}
+
+See merge request %{reference}
+```
+- The default merge request description template should be updated to include the required Apex string template.
+- The default merge request description template should be updated to include the package.xml header and footer.
+```
+## Required Apex Test Classes
+Apex::not a test::Apex
+
+## Deployment Package
+If you need to deploy metadata not covered in this merge request, please add it to the package below.
+```
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+
+</Package>
+```
+```
+
+The scripts will merge metadata types from the plugin manifest file and the manual manifest file to create the final deployment package.
+
+Note that the final deployment package cannot contain wildcard characters for delta deployments. 
+If a metadata type contains a wildcard, the type will not be added to the final deployment package.
 
 ## Declare Apex Tests
 Apex tests will be declared in the commit message with the following expression:

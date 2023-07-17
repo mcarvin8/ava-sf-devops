@@ -41,3 +41,6 @@ $RECYCLE.BIN/
 
 # Pycache
 __pycache__/
+
+# Manifest folder
+manifest/
