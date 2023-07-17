@@ -27,30 +27,10 @@ The package.xml contents in the Merge Request should be used to declare any meta
 
 The following updates must be made to your GitLab repository:
 - The default merge commit message should be updated to include the description of the MR for UI merges.
-```
-Merge branch '%{source_branch}' into '%{target_branch}'
-
-%{title}
-
-%{description}
-
-See merge request %{reference}
-```
+![Merge Request Commit Message Template](mr-commit-message-template.JPG)
 - The default merge request description template should be updated to include the required Apex string template.
 - The default merge request description template should be updated to include the package.xml header and footer.
-```
-## Required Apex Test Classes
-Apex::not a test::Apex
-
-## Deployment Package
-If you need to deploy metadata not covered in this merge request, please add it to the package below.
-```
-```
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-
-</Package>
-```
+![Default Merge Request Description](default-mr-description.JPG)
 
 The scripts will merge metadata types from the plugin manifest file and the manual manifest file to create the final deployment package.
 
