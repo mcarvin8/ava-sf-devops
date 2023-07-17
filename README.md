@@ -45,11 +45,11 @@ Apex::not a test::Apex
 ## Deployment Package
 If you need to deploy metadata not covered in this merge request, please add it to the package below.
 ```
+```
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
 
 </Package>
-```
 ```
 
 The scripts will merge metadata types from the plugin manifest file and the manual manifest file to create the final deployment package.
