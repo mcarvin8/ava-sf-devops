@@ -121,8 +121,6 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     # ex: if package.xml is empty, no ID is created and the thread will continue to run
     read_thread.daemon = True
     read_thread.start()
-    logging.info('Running the validation.' if validate else 'Running the deployment.')
-    logging.info('Please open the URL to view real-time progress.')
     run_command(command)
     # run quick-deploy on push pipelines that validate
     if validate and pipeline == 'push':
