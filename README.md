@@ -3,7 +3,7 @@ This repository contains Python scripts that demonstrate how to use GitLab actio
 
 ## Dependencies
 
-The Dockerfile will install the latest SF CLI, Git, Python 3, and the SDFX Git Delta plugin on top of Alpine.
+The Dockerfile will install the latest SF CLI, Git, Python 3, and the SDFX Git Delta plugin on top of Ubuntu.
 
 ## YML Stages
 
