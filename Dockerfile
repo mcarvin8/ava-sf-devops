@@ -16,7 +16,7 @@ ENV SF_AUTOUPDATE_DISABLE=true \
     # ^-- For force:package:version:create, disables automatic updates to the sfdx-project.json file.
 
 # Install dependencies and output versions
-RUN apt-get update && apt-get install -y curl python3 && \
+RUN apt-get update && apt-get install -y git curl python3 && \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt-get install -y nodejs && \
     npm install --global @salesforce/cli@latest && \
