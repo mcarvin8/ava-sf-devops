@@ -28,7 +28,7 @@ def parse_args():
         debug - print command rather than run
     """
     parser = argparse.ArgumentParser(description='A script to deploy metadata to Salesforce.')
-    parser.add_argument('-t', '--tests', default='not,a,test')
+    parser.add_argument('-t', '--tests', default='not a test')
     parser.add_argument('-m', '--manifest', default='manifest/package.xml')
     parser.add_argument('-w', '--wait', default=33)
     parser.add_argument('-e', '--environment')
@@ -93,9 +93,17 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
         Main function to deploy metadata to Salesforce.
     """
     # Define the command
-    command = (f'{"sf project deploy validate" if validate else "sf project deploy start"}'
-                f' -x {manifest}'
-                f' -l RunSpecifiedTests -t {testclasses} -w {wait} --verbose')
+    # dry run with no tests if validating non-apex package on a merge request
+    # salesforce will scan the package when the test level is omitted
+    if validate and pipeline == 'merge_request_event' and testclasses == 'not a test':
+        command = 'sf project deploy start --dry-run'
+    # validate with tests on apex packages (MR or push)
+    elif validate:
+        command = f"sf project deploy validate -l RunSpecifiedTests -t {testclasses}"
+    # omit test level on non-apex packages on push pipelines (deploy)
+    else:
+        command = "sf project deploy start"
+    command += f' -x {manifest} -w {wait} --verbose'
     logging.info(command)
 
     # Push pipelines which validate and quick-deploy must run tests during validation
