@@ -5,18 +5,18 @@
   to create the final deployment package.
 """
 import argparse
+import json
 import logging
 import os
+import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
-# import local scripts
-import parse_package_file
-import package_template
-import package_merge_request
 
 # Format logging message
 logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+ns = {'sforce': 'http://soap.sforce.com/2006/04/metadata'}
 
 
 def parse_args():
@@ -39,6 +39,64 @@ def parse_args():
     return args
 
 
+def get_source_api_version(json_path):
+    """
+        Function to get the sourceAPIVersion from the JSON file.
+    """
+    with open(os.path.abspath(json_path), encoding='utf-8') as file:
+        parsed_json = json.load(file)
+
+    source_api_version = parsed_json.get('sourceApiVersion')
+    if source_api_version is None:
+        logging.info('The JSON file does not have the API version.')
+        sys.exit(1)
+    return source_api_version
+
+
+def build_package_from_commit(commit_msg):
+    """
+        Parse the commit message for the package.xml
+    """
+    pattern = r'(<\?xml.*?\?>.*?</Package>)'
+    matches = re.findall(pattern, commit_msg, re.DOTALL)
+    if matches:
+        package_xml_content = matches[0]
+        logging.info('Found package.xml content:')
+        logging.info(package_xml_content.strip())
+        with open('package.xml', 'w', encoding='utf-8') as package_file:
+            package_file.write(package_xml_content.strip())
+        logging.info('package.xml file created.')
+        return 'package.xml'
+    else:
+        logging.info('Package.xml contents not found in the commit message.')
+        return None
+
+
+def parse_package_file(package_path, changes):
+    """
+        Parse a package.xml file
+        and append the metadata types to a dictionary.
+    """
+    root = ET.parse(package_path).getroot()
+
+    for metadata_type in root.findall('sforce:types', ns):
+        metadata_name = (metadata_type.find('sforce:name', ns)).text
+        # find all matches if there are multiple members for 1 metadata type
+        metadata_member_list = metadata_type.findall('sforce:members', ns)
+        for metadata_member in metadata_member_list:
+            # if a wilcard is present in the member, don't process it
+            wildcard = re.search(r'\*', metadata_member.text)
+            if (metadata_name is not None and wildcard is None and len(metadata_name.strip()) > 0) :
+                if metadata_name in changes and changes[metadata_name] is not None:
+                    changes[metadata_name].add(metadata_member.text)
+                else:
+                    changes.update({metadata_name : set()})
+                    changes[metadata_name].add(metadata_member.text)
+            elif wildcard:
+                logging.warning('WARNING: Wildcards are not allowed in the deployment package.')
+    return changes
+
+
 def run_command(cmd):
     """
         Function to run the command using the native shell.
@@ -49,30 +107,37 @@ def run_command(cmd):
         sys.exit(1)
 
 
-def create_changes_dict(from_ref, to_ref, output, delta, commit_msg):
+def create_metadata_dict(from_ref, to_ref, output, delta, commit_msg):
     """
-        Run the plugin to create the delta file
-        and add the changes from the delta file and the commit message
-        to a dictionary.
+        Create a dictionary with all metadata types.
     """
     os.mkdir(output)
     run_command(f'sf sgd:source:delta --to "{to_ref}"'
                 f' --from "{from_ref}" --output "{output}/" --generate-delta')
-    # initialize changes dictionary
-    changed = {}
-    changed = parse_package_file.parse_package_xml(delta, changed)
-    mr_package = package_merge_request.parse_package_xml(commit_msg)
+    metadata = {}
+    metadata = parse_package_file(delta, metadata)
+    mr_package = build_package_from_commit(commit_msg)
     if mr_package:
-        changed = parse_package_file.parse_package_xml(mr_package, changed)
-    return changed
+        metadata = parse_package_file(mr_package, metadata)
+    return metadata
 
 
-def create_package_xml(items, output_file):
+def create_package_file(items, output_file):
     """
         Create the final package.xml file
     """
+    api_version = get_source_api_version('./sfdx-project.json')
+
+    pkg_header = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    <Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    '''
+
+    pkg_footer = f'''\t<version>{api_version}</version>
+    </Package>
+    '''
+
     # Initialize the package contents with the header
-    package_contents = package_template.PKG_HEADER
+    package_contents = pkg_header
 
     # Append each item to the package
     for key in items:
@@ -82,7 +147,7 @@ def create_package_xml(items, output_file):
         package_contents += "\t\t<name>" + key + "</name>\n"
         package_contents += "\t</types>\n"
     # Append the footer to the package
-    package_contents += package_template.PKG_FOOTER
+    package_contents += pkg_footer
     logging.info('Deployment package contents:')
     logging.info(package_contents)
     with open(output_file, 'w', encoding='utf-8') as package_file:
@@ -93,8 +158,8 @@ def main(from_ref, to_ref, output, delta, message, combined):
     """
         Main function to build the deployment package
     """
-    changes = create_changes_dict(from_ref, to_ref, output, delta, message)
-    create_package_xml(changes, combined)
+    metadata_dict = create_metadata_dict(from_ref, to_ref, output, delta, message)
+    create_package_file(metadata_dict, combined)
 
 
 if __name__ == '__main__':
