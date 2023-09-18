@@ -20,6 +20,5 @@ RUN apt-get update && apt-get install -y git curl python3 && \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt-get install -y nodejs && \
     npm install --global @salesforce/cli@latest && \
-    echo y | sf plugins:install sfdx-git-delta && \
     sf version --verbose --json && \
     git --version

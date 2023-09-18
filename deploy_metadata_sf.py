@@ -23,7 +23,6 @@ def parse_args():
         log - deploy log where the output of this script is being written to
             python ./deploy_metadata_sfdx.py --args | tee -a deploy_log.txt
             -a flag required to append to file during run-time
-        pipeline - pipeline source (push or merge request)
         validate - set to True to run validation only deployment (for quick deploys)
         debug - print command rather than run
     """
@@ -33,7 +32,6 @@ def parse_args():
     parser.add_argument('-w', '--wait', default=33)
     parser.add_argument('-e', '--environment')
     parser.add_argument('-l', '--log', default='deploy_log.txt')
-    parser.add_argument('-p', '--pipeline', default='push')
     parser.add_argument('-v', '--validate', default=False, action='store_true')
     parser.add_argument('-d', '--debug', default=False, action='store_true')
     args = parser.parse_args()
@@ -88,29 +86,24 @@ def quick_deploy(deploy_id, wait):
     run_command(command)
 
 
-def main(testclasses, manifest, wait, environment, log, pipeline, validate, debug):
+def main(testclasses, manifest, wait, environment, log, validate, debug):
     """
         Main function to deploy metadata to Salesforce.
     """
-    # Define the command
-    # dry run with no tests if validating non-apex package on a merge request
-    # salesforce will scan the package when the test level is omitted
-    if validate and pipeline == 'merge_request_event' and testclasses == 'not a test':
+    # omit test level and dry-run when validating non-apex packages
+    if validate and testclasses == 'not a test':
         command = 'sf project deploy start --dry-run'
-    # validate with tests on apex packages (MR or push)
+    # validate with tests on apex packages
     elif validate:
-        command = f"sf project deploy validate -l RunSpecifiedTests -t {testclasses}"
-    # omit test level on non-apex packages on push pipelines (deploy)
+        command = f'sf project deploy validate -l RunSpecifiedTests -t {testclasses}'
+    # deploy  with tests on apex packages
+    elif testclasses != 'not a test':
+        command = f'sf project deploy start -l RunSpecifiedTests -t {testclasses}'
+    # omit test level when deploying non-apex packages
     else:
         command = "sf project deploy start"
     command += f' -x {manifest} -w {wait} --verbose'
     logging.info(command)
-
-    # Push pipelines which validate and quick-deploy must run tests during validation
-    # in order to be eligible for a quick-deploy
-    if validate and testclasses == 'not a test' and pipeline == 'push':
-        logging.info('Not running a validation without test classes.')
-        return
 
     if debug:
         return
@@ -130,12 +123,9 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     read_thread.daemon = True
     read_thread.start()
     run_command(command)
-    # run quick-deploy on push pipelines that validate
-    if validate and pipeline == 'push':
-        quick_deploy(result.get('deploy_id'), wait)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
     main(inputs.tests, inputs.manifest, inputs.wait, inputs.environment,
-         inputs.log, inputs.pipeline, inputs.validate, inputs.debug)
+         inputs.log, inputs.validate, inputs.debug)

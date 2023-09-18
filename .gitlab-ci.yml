@@ -13,9 +13,12 @@ cache:
 stages: 
   - build
   - quality
-  - develop
-  - fullqa
-  - production
+  - validate-develop
+  - deploy-develop
+  - validate-fullqa
+  - deploy-fullqa
+  - validate-production
+  - deploy-production
 
 variables:
   DEPLOY_TIMEOUT: 240
@@ -90,31 +93,37 @@ quality:
     - aws,prd,us-west-2
 
 ####################################################
-# Validate metadata in a Salesforce org.
+# Authenticate and build deployment package.
 ####################################################
-.validate:
+.authenticate:
   before_script:
+    # install latest plugin
+    - echo y | sfdx plugins:install sfdx-git-delta
     # Copy version JSON output for any Salesforce cases
     - sf version --verbose --json
     - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -c $DEPLOY_PACKAGE -m "$CI_COMMIT_MESSAGE"
     - testclasses=$(python3 ./apex_tests.py --tests "$CI_COMMIT_MESSAGE" --manifest $DEPLOY_PACKAGE)
     - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
     - source_folder=$(python3 ./check_package_dir.py)
-    # validate and quick-deploy apex packages on push pipelines
-    # validate all packages on merge request pipelines
-    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --validate --log $DEPLOY_LOG --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
+
+####################################################
+# Validate metadata in a Salesforce org.
+####################################################
+.validate:
+  extends: .authenticate
+  script:
+    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG
+  after_script:
+    - rm $DEPLOY_PACKAGE
+    - rm $DEPLOY_LOG
 
 ####################################################
 # Deploy metadata into a Salesforce org.
 ####################################################
 .deploy:
-  extends: .validate
+  extends: .authenticate
   script:
-    # only validate if it's a merge request pipeline
-    - if [ $CI_PIPELINE_SOURCE == "merge_request_event" ]; then exit 0; fi
-    # deploy non-apex packages
-    - if [ "$testclasses" == "not a test" ];
-      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG; fi
+    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
   after_script:
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
@@ -123,11 +132,31 @@ quality:
 ####################################################
 # Define configuration settings for the develop org.
 ####################################################
-develop:
+validate-develop:
+  image: $CI_REGISTRY_IMAGE:develop
+  resource_group: develop
+  extends: .validate
+  stage: validate-develop
+  variables:
+    AUTH_ALIAS: DEVELOP
+    AUTH_URL: $DEVELOP_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      when: always
+  allow_failure: false
+  environment:
+    name: develop
+    url: https://dev.sandbox.my.salesforce.com
+  tags:
+    - aws,prd,us-west-2
+
+deploy-develop:
   image: $CI_REGISTRY_IMAGE:develop
   resource_group: develop
   extends: .deploy
-  stage: develop
+  stage: deploy-develop
   variables:
     AUTH_ALIAS: DEVELOP
     AUTH_URL: $DEVELOP_AUTH_URL
@@ -136,8 +165,6 @@ develop:
       when: never
     - if: $DEVELOP_DISABLED
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
-      when: manual
     - if: $CI_COMMIT_REF_NAME == 'develop'
       when: always
   allow_failure: false
@@ -150,11 +177,31 @@ develop:
 ####################################################
 # Define configuration settings for the fullqa org.
 ####################################################
-fullqa:
+validate-fullqa:
+  image: $CI_REGISTRY_IMAGE:fullqa
+  resource_group: fullqa
+  extends: .validate
+  stage: validate-fullqa
+  variables:
+    AUTH_ALIAS: FULLQA
+    AUTH_URL: $FULLQA_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
+      when: always
+  allow_failure: false
+  environment:
+    name: fullqa
+    url: https://fullqa.sandbox.my.salesforce.com
+  tags:
+    - aws,prd,us-west-2
+
+deploy-fullqa:
   image: $CI_REGISTRY_IMAGE:fullqa
   resource_group: fullqa
   extends: .deploy
-  stage: fullqa
+  stage: deploy-fullqa
   variables:
     AUTH_ALIAS: FULLQA
     AUTH_URL: $FULLQA_AUTH_URL
@@ -163,8 +210,6 @@ fullqa:
       when: never
     - if: $FULLQA_DISABLED
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
-      when: manual
     - if: $CI_COMMIT_REF_NAME == 'fullqa'
       when: always
   allow_failure: false
@@ -177,10 +222,29 @@ fullqa:
 ####################################################
 # Define configuration settings for the production org.
 ####################################################
-production:
+validate-production:
+  resource_group: production
+  extends: .validate
+  stage: validate-production
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: always
+  allow_failure: false
+  environment:
+    name: production
+    url: https://my.salesforce.com
+  tags:
+    - aws,prd,us-west-2
+
+deploy-production:
   resource_group: production
   extends: .deploy
-  stage: production
+  stage: deploy-production
   variables:
     AUTH_ALIAS: PRODUCTION
     AUTH_URL: $PRODUCTION_AUTH_URL
@@ -189,8 +253,6 @@ production:
       when: never
     - if: $PRODUCTION_DISABLED
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
-      when: manual
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: false
