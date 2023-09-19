@@ -14,7 +14,7 @@ logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
 # Metadata which require Apex tests
 # Flows require Apex tests if deployed as active
-APEX_TYPES = ['ApexClass', 'ApexComponent', 'ApexPage', 'ApexTrigger']
+APEX_TYPES = ['ApexClass', 'ApexTrigger']
 
 
 def parse_args():
