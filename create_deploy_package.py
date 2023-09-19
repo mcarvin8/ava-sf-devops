@@ -109,7 +109,7 @@ def create_metadata_dict(from_ref, to_ref, delta, commit_msg):
     metadata, api_version = parse_package_file(delta, metadata, True)
     mr_package = build_package_from_commit(commit_msg)
     if mr_package:
-        metadatam, api_version = parse_package_file(mr_package, metadata, False)
+        metadata, api_version = parse_package_file(mr_package, metadata, False)
     return metadata, api_version
 
 
