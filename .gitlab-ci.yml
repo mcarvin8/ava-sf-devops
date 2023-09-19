@@ -161,6 +161,8 @@ deploy-develop:
     AUTH_ALIAS: DEVELOP
     AUTH_URL: $DEVELOP_AUTH_URL
   rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: $DEVELOP_DISABLED
@@ -206,6 +208,8 @@ deploy-fullqa:
     AUTH_ALIAS: FULLQA
     AUTH_URL: $FULLQA_AUTH_URL
   rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: $FULLQA_DISABLED
@@ -249,6 +253,8 @@ deploy-production:
     AUTH_ALIAS: PRODUCTION
     AUTH_URL: $PRODUCTION_AUTH_URL
   rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
     - if: $CI_PIPELINE_SOURCE == "schedule"
       when: never
     - if: $PRODUCTION_DISABLED
