@@ -5,7 +5,6 @@
   to create the final deployment package.
 """
 import argparse
-import json
 import logging
 import os
 import re
@@ -38,20 +37,6 @@ def parse_args():
     return args
 
 
-def get_source_api_version(json_path):
-    """
-        Function to get the sourceAPIVersion from the JSON file.
-    """
-    with open(os.path.abspath(json_path), encoding='utf-8') as file:
-        parsed_json = json.load(file)
-
-    source_api_version = parsed_json.get('sourceApiVersion')
-    if source_api_version is None:
-        logging.info('The JSON file does not have the API version.')
-        sys.exit(1)
-    return source_api_version
-
-
 def build_package_from_commit(commit_msg):
     """
         Parse the commit message for the package.xml
@@ -60,18 +45,16 @@ def build_package_from_commit(commit_msg):
     matches = re.findall(pattern, commit_msg, re.DOTALL)
     if matches:
         package_xml_content = matches[0]
-        logging.info('Found package.xml content:')
-        logging.info(package_xml_content.strip())
+        logging.info('Found package.xml contents in the commit message.')
         with open('package.xml', 'w', encoding='utf-8') as package_file:
             package_file.write(package_xml_content.strip())
-        logging.info('package.xml file created.')
         return 'package.xml'
     else:
-        logging.info('Package.xml contents not found in the commit message.')
+        logging.info('Did not find package.xml contents in the commit message.')
         return None
 
 
-def parse_package_file(package_path, changes):
+def parse_package_file(package_path, changes, ignore_api_version):
     """
         Parse a package.xml file
         and append the metadata types to a dictionary.
@@ -93,7 +76,17 @@ def parse_package_file(package_path, changes):
                     changes[metadata_name].add(metadata_member.text)
             elif wildcard:
                 logging.warning('WARNING: Wildcards are not allowed in the deployment package.')
-    return changes
+
+    # ignore api version on plugin (same as JSON)
+    # if package.xml in commit message has one, process it
+    if ignore_api_version:
+        api_version = None
+    else:
+        try:
+            api_version = (root.find('sforce:version', ns)).text
+        except AttributeError:
+            api_version = None
+    return changes, api_version
 
 
 def run_command(cmd):
@@ -113,24 +106,24 @@ def create_metadata_dict(from_ref, to_ref, delta, commit_msg):
     run_command(f'sf sgd:source:delta --to "{to_ref}"'
                 f' --from "{from_ref}" --output "."')
     metadata = {}
-    metadata = parse_package_file(delta, metadata)
+    metadata, api_version = parse_package_file(delta, metadata, True)
     mr_package = build_package_from_commit(commit_msg)
     if mr_package:
-        metadata = parse_package_file(mr_package, metadata)
-    return metadata
+        metadatam, api_version = parse_package_file(mr_package, metadata, False)
+    return metadata, api_version
 
 
-def create_package_file(items, output_file):
+def create_package_file(items, api_version, output_file):
     """
         Create the final package.xml file
     """
-    api_version = get_source_api_version('./sfdx-project.json')
-
     pkg_header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
     pkg_header += '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n'
 
-    pkg_footer = f'\t<version>{api_version}</version>\n'
-    pkg_footer += '</Package>\n'
+    if api_version:
+        pkg_footer = f'\t<version>{api_version}</version>\n</Package>\n'
+    else:
+        pkg_footer = '</Package>\n'
 
     # Initialize the package contents with the header
     package_contents = pkg_header
@@ -154,8 +147,8 @@ def main(from_ref, to_ref, delta, message, combined):
     """
         Main function to build the deployment package
     """
-    metadata_dict = create_metadata_dict(from_ref, to_ref, delta, message)
-    create_package_file(metadata_dict, combined)
+    metadata_dict, api_version = create_metadata_dict(from_ref, to_ref, delta, message)
+    create_package_file(metadata_dict, api_version, combined)
 
 
 if __name__ == '__main__':
