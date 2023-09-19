@@ -31,8 +31,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='A script to build the deployment package.')
     parser.add_argument('-f', '--from_ref')
     parser.add_argument('-t', '--to_ref')
-    parser.add_argument('-o', '--output', default='changed-sources')
-    parser.add_argument('-d', '--delta', default='changed-sources/package/package.xml')
+    parser.add_argument('-d', '--delta', default='package/package.xml')
     parser.add_argument('-m', '--message', default=None)
     parser.add_argument('-c', '--combined', default='deploy.xml')
     args = parser.parse_args()
@@ -107,13 +106,12 @@ def run_command(cmd):
         sys.exit(1)
 
 
-def create_metadata_dict(from_ref, to_ref, output, delta, commit_msg):
+def create_metadata_dict(from_ref, to_ref, delta, commit_msg):
     """
         Create a dictionary with all metadata types.
     """
-    os.mkdir(output)
     run_command(f'sf sgd:source:delta --to "{to_ref}"'
-                f' --from "{from_ref}" --output "{output}/" --generate-delta')
+                f' --from "{from_ref}" --output "."')
     metadata = {}
     metadata = parse_package_file(delta, metadata)
     mr_package = build_package_from_commit(commit_msg)
@@ -128,13 +126,11 @@ def create_package_file(items, output_file):
     """
     api_version = get_source_api_version('./sfdx-project.json')
 
-    pkg_header = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-    <Package xmlns="http://soap.sforce.com/2006/04/metadata">
-    '''
+    pkg_header = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    pkg_header += '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n'
 
-    pkg_footer = f'''\t<version>{api_version}</version>
-    </Package>
-    '''
+    pkg_footer = f'\t<version>{api_version}</version>\n'
+    pkg_footer += '</Package>\n'
 
     # Initialize the package contents with the header
     package_contents = pkg_header
@@ -154,15 +150,15 @@ def create_package_file(items, output_file):
         package_file.write(package_contents)
 
 
-def main(from_ref, to_ref, output, delta, message, combined):
+def main(from_ref, to_ref, delta, message, combined):
     """
         Main function to build the deployment package
     """
-    metadata_dict = create_metadata_dict(from_ref, to_ref, output, delta, message)
+    metadata_dict = create_metadata_dict(from_ref, to_ref, delta, message)
     create_package_file(metadata_dict, combined)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
-    main(inputs.from_ref, inputs.to_ref, inputs.output,
+    main(inputs.from_ref, inputs.to_ref,
          inputs.delta, inputs.message, inputs.combined)
