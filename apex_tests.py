@@ -4,6 +4,7 @@
 """
 import argparse
 import logging
+import os.path
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -55,6 +56,7 @@ def extract_tests(commit_msg):
         if tests.isspace() or not tests:
             raise AttributeError
         tests = remove_spaces(tests)
+        tests = validate_tests(tests)
         tests = replace_commas(tests)
     except AttributeError:
         logging.warning('Apex tests not found in the commit message')
@@ -78,6 +80,23 @@ def search_for_apex(package_path):
             apex = True
             break
     return apex
+
+
+def validate_tests(test_classes):
+    """
+        Function to validate apex test classes against the working directory.
+    """
+    valid_test_classes = []
+    for test_class in test_classes.split(','):
+        if os.path.isfile(f'force-app/main/default/classes/{test_class}.cls'):
+            valid_test_classes.append(test_class)
+        else:
+            logging.info('WARNING: %s is not valid test class in the current directory', test_class)
+    if not valid_test_classes:
+        logging.info('ERROR: None of the test classes provided are valid test classes.')
+        logging.info('Confirm test class names and try again.')
+        sys.exit(1)
+    return ','.join(valid_test_classes)
 
 
 def main(tests, manifest):
