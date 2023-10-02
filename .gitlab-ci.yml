@@ -112,7 +112,7 @@ quality:
 .validate:
   extends: .authenticate
   script:
-    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG
+    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
   after_script:
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
@@ -123,7 +123,12 @@ quality:
 .deploy:
   extends: .authenticate
   script:
-    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
+    # full-deploy if deploying non-apex
+    # validate and quick-deploy apex packages
+    - if [ "$testclasses" == "not a test" ];
+      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG; 
+      else python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
+      fi
   after_script:
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
