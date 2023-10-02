@@ -77,15 +77,27 @@ def create_sf_link(sf_env, log, result):
         result['deploy_id'] = deploy_id
 
 
-def quick_deploy(deploy_id, wait):
+def quick_deploy(deploy_id, wait, environment, log, result):
     """
         Function to run a quick-deploy after
         a successful validation.
     """
+    quick_deploy_thread = threading.Thread(target=create_sf_link, args=(environment, log, result))
+    quick_deploy_thread.daemon = True
+    quick_deploy_thread.start()
     command = f'sf project deploy quick -i {deploy_id} -w {wait}'
     logging.info(command)
     logging.info('Running the quick-deployment.')
     run_command(command)
+
+
+def create_empty_file(file_path):
+    """
+        Function to create an empty file
+    """
+    # overwrite any existing file
+    with open(file_path, 'w', encoding='utf-8'):
+        pass
 
 
 def main(testclasses, manifest, wait, environment, log, pipeline, validate, debug):
@@ -106,8 +118,7 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
         return
 
     # Create deploy log to avoid any threading errors
-    with open(log, 'w', encoding='utf-8'):
-        pass
+    create_empty_file(log)
 
     # Create result dictionary to store deploy_id
     result = {}
@@ -123,7 +134,9 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     run_command(command)
     # run quick-deploy after a validation on a push pipeline (apex)
     if validate and pipeline == 'push':
-        quick_deploy(result.get('deploy_id'), wait)
+        # re-write log before quick-deploy
+        create_empty_file(log)
+        quick_deploy(result.get('deploy_id'), wait, environment, log, result)
 
 
 if __name__ == '__main__':
