@@ -12,8 +12,10 @@ ENV SF_AUTOUPDATE_DISABLE=true \
     #     If you get errors about My Domain not configured when you try to use a newly-created scratch org, increase this wait time.
     SF_PROJECT_AUTOUPDATE_DISABLE_FOR_PACKAGE_CREATE=true \
     # ^-- For force:package:create, disables automatic updates to the sfdx-project.json file.
-    SF_PROJECT_AUTOUPDATE_DISABLE_FOR_PACKAGE_VERSION_CREATE=true
+    SF_PROJECT_AUTOUPDATE_DISABLE_FOR_PACKAGE_VERSION_CREATE=true \
     # ^-- For force:package:version:create, disables automatic updates to the sfdx-project.json file.
+    SF_DISABLE_DNS_CHECK=true
+    # ^-- Disable the DNS check done when looking for the latest API version in the org.
 
 # Install dependencies and output versions
 RUN apt-get update && apt-get install -y curl git python3 ca-certificates curl gnupg && \
