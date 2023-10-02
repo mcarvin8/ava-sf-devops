@@ -151,8 +151,9 @@ validate-develop:
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
       when: always
   allow_failure: false
+  # create un-protected environment so anyone can validate
   environment:
-    name: develop
+    name: validate-develop
     url: https://dev.sandbox.my.salesforce.com
   tags:
     - aws,prd,us-west-2
@@ -198,8 +199,9 @@ validate-fullqa:
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
       when: always
   allow_failure: false
+  # create un-protected environment so anyone can validate
   environment:
-    name: fullqa
+    name: validate-fullqa
     url: https://fullqa.sandbox.my.salesforce.com
   tags:
     - aws,prd,us-west-2
@@ -244,8 +246,9 @@ validate-production:
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: false
+  # create un-protected environment so anyone can validate
   environment:
-    name: production
+    name: validate-production
     url: https://my.salesforce.com
   tags:
     - aws,prd,us-west-2
