@@ -12,13 +12,9 @@ cache:
 
 stages: 
   - build
+  - validate
   - quality
-  - validate-develop
-  - deploy-develop
-  - validate-fullqa
-  - deploy-fullqa
-  - validate-production
-  - deploy-production
+  - deploy
 
 variables:
   DEPLOY_TIMEOUT: 240
@@ -109,7 +105,7 @@ quality:
 ####################################################
 # Validate metadata in a Salesforce org.
 ####################################################
-.validate:
+.validate-metadata:
   extends: .authenticate
   script:
     - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
@@ -120,7 +116,7 @@ quality:
 ####################################################
 # Deploy metadata into a Salesforce org.
 ####################################################
-.deploy:
+.deploy-metadata:
   extends: .authenticate
   script:
     # full-deploy if deploying non-apex
@@ -140,8 +136,8 @@ quality:
 validate-develop:
   image: $CI_REGISTRY_IMAGE:develop
   resource_group: develop
-  extends: .validate
-  stage: validate-develop
+  extends: .validate-metadata
+  stage: validate
   variables:
     AUTH_ALIAS: DEVELOP
     AUTH_URL: $DEVELOP_AUTH_URL
@@ -161,8 +157,8 @@ validate-develop:
 deploy-develop:
   image: $CI_REGISTRY_IMAGE:develop
   resource_group: develop
-  extends: .deploy
-  stage: deploy-develop
+  extends: .deploy-metadata
+  stage: deploy
   variables:
     AUTH_ALIAS: DEVELOP
     AUTH_URL: $DEVELOP_AUTH_URL
@@ -188,8 +184,8 @@ deploy-develop:
 validate-fullqa:
   image: $CI_REGISTRY_IMAGE:fullqa
   resource_group: fullqa
-  extends: .validate
-  stage: validate-fullqa
+  extends: .validate-metadata
+  stage: validate
   variables:
     AUTH_ALIAS: FULLQA
     AUTH_URL: $FULLQA_AUTH_URL
@@ -209,8 +205,8 @@ validate-fullqa:
 deploy-fullqa:
   image: $CI_REGISTRY_IMAGE:fullqa
   resource_group: fullqa
-  extends: .deploy
-  stage: deploy-fullqa
+  extends: .deploy-metadata
+  stage: deploy
   variables:
     AUTH_ALIAS: FULLQA
     AUTH_URL: $FULLQA_AUTH_URL
@@ -235,8 +231,8 @@ deploy-fullqa:
 ####################################################
 validate-production:
   resource_group: production
-  extends: .validate
-  stage: validate-production
+  extends: .validate-metadata
+  stage: validate
   variables:
     AUTH_ALIAS: PRODUCTION
     AUTH_URL: $PRODUCTION_AUTH_URL
@@ -255,8 +251,8 @@ validate-production:
 
 deploy-production:
   resource_group: production
-  extends: .deploy
-  stage: deploy-production
+  extends: .deploy-metadata
+  stage: deploy
   variables:
     AUTH_ALIAS: PRODUCTION
     AUTH_URL: $PRODUCTION_AUTH_URL
