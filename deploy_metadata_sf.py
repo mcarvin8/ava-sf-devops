@@ -107,7 +107,8 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     # Define the command
     command = (f'{f"sf project deploy validate -l RunSpecifiedTests -t {testclasses}" if (validate and testclasses != "not a test") else "sf project deploy start"}'
                 f'{" --dry-run" if (validate and testclasses == "not a test") else ""}'
-                f' -x {manifest} -w {wait} --verbose')
+                f' -x {manifest} -w {wait} --verbose'
+                f'{" --coverage-formatters json --results-dir coverage" if (validate and testclasses != "not a test" and pipeline != "push") else ""}')
     logging.info(command)
 
     if validate and testclasses == 'not a test' and pipeline == 'push':
