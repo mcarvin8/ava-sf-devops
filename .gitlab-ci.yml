@@ -8,6 +8,7 @@ image: $CI_REGISTRY_IMAGE:production
 cache:
   key: ${CI_COMMIT_REF_NAME}
   paths:
+    - .sf/
     - .sfdx/
 
 stages: 
