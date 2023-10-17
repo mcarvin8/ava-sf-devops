@@ -59,33 +59,23 @@ def parse_package_file(package_path, changes, ignore_api_version):
         Parse a package.xml file
         and append the metadata types to a dictionary.
     """
-    root = ET.parse(package_path).getroot()
+    try:
+        root = ET.parse(package_path).getroot()
+    except ET.ParseError:
+        logging.info('Cannot parse package at %s', package_path)
+        return changes, None
 
     for metadata_type in root.findall('sforce:types', ns):
-        metadata_name = (metadata_type.find('sforce:name', ns)).text
-        # find all matches if there are multiple members for 1 metadata type
+        metadata_name = metadata_type.find('sforce:name', ns).text
         metadata_member_list = metadata_type.findall('sforce:members', ns)
-        for metadata_member in metadata_member_list:
-            # if a wilcard is present in the member, don't process it
-            wildcard = re.search(r'\*', metadata_member.text)
-            if (metadata_name is not None and wildcard is None and len(metadata_name.strip()) > 0) :
-                if metadata_name in changes and changes[metadata_name] is not None:
-                    changes[metadata_name].add(metadata_member.text)
-                else:
-                    changes.update({metadata_name : set()})
-                    changes[metadata_name].add(metadata_member.text)
-            elif wildcard:
-                logging.warning('WARNING: Wildcards are not allowed in the deployment package.')
+        if metadata_name and '*' not in metadata_name.strip():
+            changes.setdefault(metadata_name, set()).update(metadata_member.text for metadata_member in metadata_member_list)
+        elif '*' in metadata_name:
+            logging.warning('WARNING: Wildcards are not allowed in the deployment package.')
 
     # ignore api version on plugin (same as JSON)
     # if package.xml in commit message has one, process it
-    if ignore_api_version:
-        api_version = None
-    else:
-        try:
-            api_version = (root.find('sforce:version', ns)).text
-        except AttributeError:
-            api_version = None
+    api_version = root.find('sforce:version', ns).text if not ignore_api_version and root.find('sforce:version', ns) is not None else None
     return changes, api_version
 
 
