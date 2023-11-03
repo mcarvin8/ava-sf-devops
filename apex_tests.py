@@ -31,21 +31,6 @@ def parse_args():
     return args
 
 
-def remove_spaces(string):
-    """
-        Function to remove extra spaces in a string.
-    """
-    pattern = re.compile(r'\s+')
-    return re.sub(pattern, '', string)
-
-
-def replace_commas(string):
-    """
-        Function to remove commas with a single space.
-    """
-    return re.sub(',', ' ', string)
-
-
 def extract_tests(commit_msg):
     """
         Extract tests using a regular expression.
@@ -55,9 +40,7 @@ def extract_tests(commit_msg):
         tests = re.search(r'[Aa][Pp][Ee][Xx]::(.*?)::[Aa][Pp][Ee][Xx]', commit_msg, flags=0).group(1)
         if tests.isspace() or not tests:
             raise AttributeError
-        tests = remove_spaces(tests)
         tests = validate_tests(tests)
-        tests = replace_commas(tests)
     except AttributeError:
         logging.warning('Apex tests not found in the commit message')
         sys.exit(1)
@@ -86,17 +69,30 @@ def validate_tests(test_classes):
     """
         Function to validate apex test classes against the working directory.
     """
-    valid_test_classes = []
-    for test_class in test_classes.split(','):
+    # Use a dictionary to ensure unique test classes
+    valid_test_classes = {}
+
+    # Replace commas with spaces
+    test_classes = re.sub(r',', ' ', test_classes)
+
+    # Remove extra spaces
+    test_classes = re.sub(r'\s+', ' ', test_classes)
+
+    # Split the test classes string into a list
+    test_classes_list = test_classes.split()
+
+    for test_class in test_classes_list:
         if os.path.isfile(f'force-app/main/default/classes/{test_class}.cls'):
-            valid_test_classes.append(test_class)
+            valid_test_classes[test_class] = None
         else:
-            logging.info('WARNING: %s is not valid test class in the current directory', test_class)
+            logging.info('WARNING: %s is not a valid test class in the current directory.',
+                         test_class)
     if not valid_test_classes:
         logging.info('ERROR: None of the test classes provided are valid test classes.')
         logging.info('Confirm test class names and try again.')
         sys.exit(1)
-    return ','.join(valid_test_classes)
+    # Join valid test classes with a single space for the CLI
+    return ' '.join(valid_test_classes.keys())
 
 
 def main(tests, manifest):
