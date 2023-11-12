@@ -5,17 +5,22 @@
 """
 import argparse
 import json
-import xml.etree.ElementTree as ET
+import logging
+import sys
 from xml.dom.minidom import Document
+
+
+# Format logging message
+logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
 
 def parse_args():
     """
         Function to parse required arguments.
-        file - path to the JSON file, if not the default value
     """
     parser = argparse.ArgumentParser(description='A script to set code coverage.')
-    parser.add_argument('-f', '--file', default='./coverage/coverage/coverage.json')
+    parser.add_argument('-j', '--json', default='./coverage/coverage/coverage.json')
+    parser.add_argument('-x', '--xml', default='./coverage.xml')
     args = parser.parse_args()
     return args
 
@@ -50,27 +55,28 @@ def convert_to_generic_test_report(data):
     return doc.toprettyxml(indent="  ")  # Format with newlines
 
 
-def main(input_file):
+def main(json_path, xml_path):
     """
         Main function
     """
     try:
-        with open(input_file, "r") as f:
-            original_data = json.load(f)
+        with open(json_path, "r", encoding='utf-8') as json_file:
+            original_data = json.load(json_file)
     except FileNotFoundError:
-        print(f"Error: The file {input_file} was not found.")
-        original_data = {}
+        logging.info('The JSON file %s was not found.', json_path)
+        sys.exit(1)
 
     # Convert to Generic Test Execution Report Format (XML)
     generic_test_report = convert_to_generic_test_report(original_data)
 
     # Print the Generic Test Execution Report without the first line
-    print('\n'.join(generic_test_report.split('\n')[1:]))
+    xml_data = '\n'.join(generic_test_report.split('\n')[1:])
+    logging.info(xml_data)
 
-    output_file = "coverage.xml"
-    with open(output_file, "w") as f:
-        f.write('\n'.join(generic_test_report.split('\n')[1:]))  # Wri
+    with open(xml_path, "w", encoding='utf-8') as xml_file:
+        xml_file.write(xml_data)
+
 
 if __name__ == '__main__':
     inputs = parse_args()
-    main(inputs.file)
+    main(inputs.json, inputs.xml)
