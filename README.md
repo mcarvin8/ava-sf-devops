@@ -40,3 +40,15 @@ Apex tests will be declared in the commit message with the following expression:
 The entire "Apex" string is case insensitive.
 
 The above string will be converted to the SF compatible string (multiple test classes separated by spaces).
+
+## SonarLint Plugin with VS Code
+The "sonarsource.sonarlint-vscode" plugin has been added to the recommended VS code extensions for this project.
+
+Update the `.vscode/settings.json` with your SonarQube project to integrate SonarQube into VS Code.
+
+``` json
+  "sonarlint.connectedMode.project": {
+    "connectionId": "<default>",
+    "projectKey": "set-to-your-sonarqube-project"
+  }
+```
