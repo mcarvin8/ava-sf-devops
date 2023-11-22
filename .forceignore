@@ -10,3 +10,6 @@ package.xml
 
 # LWC Jest
 **/__tests__/**
+
+# Ignore active or older Bot versions
+**/bots/Pizza_Bot/v1.botVersion-meta.xml
