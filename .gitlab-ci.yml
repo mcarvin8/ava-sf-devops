@@ -14,7 +14,6 @@ cache:
 stages: 
   - build
   - validate
-  - quality
   - deploy
 
 variables:
@@ -59,68 +58,27 @@ build:
   tags: 
     - aws,prd,us-west-2
 
-####################################################
-# Scan the code base with SonarQube.
-####################################################
-quality:
-  image:
-    name: sonarsource/sonar-scanner-cli:latest
-  stage: quality
-  cache:
-    key: $CI_JOB_NAME
-    paths:
-      - .sonar/cache
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
-      when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
-      changes:
-        - 'force-app/main/default/classes/*.cls'
-        - 'force-app/main/default/triggers/*.trigger'
-      variables:
-        SONAR_REF: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
-      when: always
-    - if: $CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa' || $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
-      changes:
-        - 'force-app/main/default/classes/*.cls'
-        - 'force-app/main/default/triggers/*.trigger'
-      variables:
-        SONAR_REF: $CI_COMMIT_REF_NAME
-      when: always
-    - when: never
-  allow_failure: true
-  variables:
-    SONAR_USER_HOME: '${CI_PROJECT_DIR}/.sonar'
-    GIT_DEPTH: '0'
-    SONAR_LOGIN: $SONAR_TOKEN
-    SONAR_HOST_URL: $SONAR_URL
-    SONAR_GATE: 'false'
-  script:
-    - sonar-scanner -Dsonar.qualitygate.wait=$SONAR_GATE -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG -Dsonar.gitlab.ref_name=$SONAR_REF -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
-  tags:
-    - aws,prd,us-west-2
-
-####################################################
-# Authenticate and build deployment package.
+#####################################################
+# Authenticate to a Salesforce org.
 ####################################################
 .authenticate:
   before_script:
-    # install latest plugin
-    - echo y | sf plugins:install sfdx-git-delta
-    # Copy version JSON output for any Salesforce cases
-    - sf version --verbose --json
-    - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$CI_COMMIT_MESSAGE"
-    - testclasses=$(python3 ./apex_tests.py --tests "$CI_COMMIT_MESSAGE" --manifest $DEPLOY_PACKAGE)
     - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - echo y | sf plugins:install sfdx-git-delta
+    - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$CI_COMMIT_MESSAGE"
     - source_folder=$(python3 ./check_package_dir.py)
+    - testclasses=$(python3 ./apex_tests.py --tests "$CI_COMMIT_MESSAGE" --manifest $DEPLOY_PACKAGE)
 
 ####################################################
 # Validate metadata in a Salesforce org.
 ####################################################
 .validate-metadata:
   extends: .authenticate
+  cache:
+    key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+    paths:
+      - .sf/
+      - .sfdx/
   script:
     - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
   after_script:
@@ -134,9 +92,9 @@ quality:
   extends: .authenticate
   script:
     # full-deploy if deploying non-apex
-    # validate and quick-deploy apex packages
+    # validate and quick-deploy if deploying apex
     - if [ "$testclasses" == "not a test" ];
-      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG; 
+      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG  | tee -a $DEPLOY_LOG;
       else python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
       fi
   after_script:
@@ -145,143 +103,144 @@ quality:
     - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --hook "$SLACK_WEBHOOK_URL"
 
 ####################################################
-# Define configuration settings for the develop org.
+# Declare configuration settings for the sandbox org.
 ####################################################
-validate-develop:
-  image: $CI_REGISTRY_IMAGE:develop
-  resource_group: develop
+validate-dev:
   extends: .validate-metadata
   stage: validate
-  variables:
-    AUTH_ALIAS: DEVELOP
-    AUTH_URL: $DEVELOP_AUTH_URL
+  resource_group: develop
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == 'web'
+      when: never
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
-      when: always
+      when: manual
   allow_failure: false
-  # create un-protected environment so anyone can validate
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
   environment:
-    name: validate-develop
-    url: https://dev.sandbox.my.salesforce.com
-  tags:
+    name: validate-sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
     - aws,prd,us-west-2
 
-deploy-develop:
-  image: $CI_REGISTRY_IMAGE:develop
-  resource_group: develop
+dev:
   extends: .deploy-metadata
   stage: deploy
-  variables:
-    AUTH_ALIAS: DEVELOP
-    AUTH_URL: $DEVELOP_AUTH_URL
+  resource_group: develop
   rules:
+    - if: $CI_PIPELINE_SOURCE == 'web'
+      when: never
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
-    - if: $DEVELOP_DISABLED
+    - if: $SANDBOX_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == 'develop'
       when: always
   allow_failure: false
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
   environment:
-    name: develop
-    url: https://dev.sandbox.my.salesforce.com
-  tags:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
     - aws,prd,us-west-2
 
 ####################################################
-# Define configuration settings for the fullqa org.
+# Declare configuration settings for the fullqa org.
 ####################################################
 validate-fullqa:
-  image: $CI_REGISTRY_IMAGE:fullqa
-  resource_group: fullqa
+  image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
-  variables:
-    AUTH_ALIAS: FULLQA
-    AUTH_URL: $FULLQA_AUTH_URL
+  resource_group: fullqa
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == 'web'
+      when: never
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
-      when: always
+      when: manual
   allow_failure: false
-  # create un-protected environment so anyone can validate
-  environment:
-    name: validate-fullqa
-    url: https://fullqa.sandbox.my.salesforce.com
-  tags:
-    - aws,prd,us-west-2
-
-deploy-fullqa:
-  image: $CI_REGISTRY_IMAGE:fullqa
-  resource_group: fullqa
-  extends: .deploy-metadata
-  stage: deploy
   variables:
     AUTH_ALIAS: FULLQA
     AUTH_URL: $FULLQA_AUTH_URL
+  environment:
+    name: validate-fullqa
+    url: https://avalara--fullqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+fullqa:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: fullqa
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'web'
       when: never
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $FULLQA_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == 'fullqa'
       when: always
   allow_failure: false
+  variables:
+    AUTH_ALIAS: FULLQA
+    AUTH_URL: $FULLQA_AUTH_URL
   environment:
     name: fullqa
-    url: https://fullqa.sandbox.my.salesforce.com
-  tags:
+    url: https://avalara--fullqa.sandbox.my.salesforce.com
+  tags: 
     - aws,prd,us-west-2
 
 ####################################################
-# Define configuration settings for the production org.
+# Declare configuration settings for the production org.
 ####################################################
-validate-production:
-  resource_group: production
+validate-prod:
   extends: .validate-metadata
   stage: validate
-  variables:
-    AUTH_ALIAS: PRODUCTION
-    AUTH_URL: $PRODUCTION_AUTH_URL
+  resource_group: production
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == 'web'
+      when: never
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
-      when: always
+      when: manual
   allow_failure: false
-  # create un-protected environment so anyone can validate
-  environment:
-    name: validate-production
-    url: https://my.salesforce.com
-  tags:
-    - aws,prd,us-west-2
-
-deploy-production:
-  resource_group: production
-  extends: .deploy-metadata
-  stage: deploy
   variables:
     AUTH_ALIAS: PRODUCTION
     AUTH_URL: $PRODUCTION_AUTH_URL
+  environment:
+    name: validate-prod
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+production:
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: production
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'web'
       when: never
-    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $PRODUCTION_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: false
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
   environment:
     name: production
-    url: https://my.salesforce.com
-  tags:
+    url: https://avalara.my.salesforce.com
+  tags: 
     - aws,prd,us-west-2

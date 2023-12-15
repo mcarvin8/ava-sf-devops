@@ -10,7 +10,6 @@ The pipeline is divided into several stages:
 - The `build` stage builds a Docker image for the org if the Dockerfile has been modified. This Docker image is pushed to the GitLab Container Registry for the repository.
 - The `validate` stage consists of 3 jobs that represent 3 Salesforce orgs which have their own long-running branch. When a merge request is opened against one of these branches, it will validate the changes in the org.
     - This stage will create a code coverage XML for SonarQube if validating an Apex package. The JSON file created by the SF CLI validation command is not accepted by SQ automatically. The JSON is convereted to the Generic Test Coverage Format (https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/generic-test-data/)
-- The `quality` stage runs a SonarQube scan if there are changes to Apex. This assumes that your GitLab instance has been configured with SonarQube. Ensure Pull Request decoration is enabled for your repository to enable SonarQube comments on merge requests. Ensure MR pipelines are enabled to run this scan when MRs are open into the target branch.
 - The `deploy` stage consists of 3 jobs that will deploy the metadata to the assigned org after a merge into the long-running branch.
 
 ## Declare Metadata
@@ -41,14 +40,3 @@ The entire "Apex" string is case insensitive.
 
 The above string will be converted to the SF compatible string (multiple test classes separated by spaces).
 
-## SonarLint Plugin with VS Code
-The "sonarsource.sonarlint-vscode" plugin has been added to the recommended VS code extensions for this project.
-
-Update the `.vscode/settings.json` with your SonarQube project to integrate SonarQube into VS Code.
-
-``` json
-  "sonarlint.connectedMode.project": {
-    "connectionId": "<default>",
-    "projectKey": "set-to-your-sonarqube-project"
-  }
-```

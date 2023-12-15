@@ -4,7 +4,6 @@
     "redhat.vscode-xml",
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
-    "financialforce.lana",
-    "sonarsource.sonarlint-vscode"
+    "financialforce.lana"
   ]
 }
