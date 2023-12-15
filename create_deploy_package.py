@@ -6,7 +6,6 @@
 """
 import argparse
 import logging
-import os
 import re
 import subprocess
 import sys
@@ -20,38 +19,40 @@ ns = {'sforce': 'http://soap.sforce.com/2006/04/metadata'}
 
 def parse_args():
     """
-        Parse the required args
+        Function to pass required arguments.
         from_ref - previous commit or baseline branch $CI_COMMIT_BEFORE_SHA
         to_ref - current commit or new branch $CI_COMMIT_SHA
-        delta - delta file created by the SDFX Git Delta Plugin
+        plugin - package created by the SDFX Git Delta Plugin
         message - commit message that includes package.xml contents
-        combined - package.xml with delta and manifest updates combined
+        output - package.xml for deployment
     """
     parser = argparse.ArgumentParser(description='A script to build the deployment package.')
     parser.add_argument('-f', '--from_ref')
     parser.add_argument('-t', '--to_ref')
-    parser.add_argument('-d', '--delta', default='package/package.xml')
+    parser.add_argument('-p', '--plugin', default='package/package.xml')
     parser.add_argument('-m', '--message', default=None)
-    parser.add_argument('-c', '--combined', default='deploy.xml')
+    parser.add_argument('-o', '--output', default='package.xml')
     args = parser.parse_args()
     return args
 
 
-def build_package_from_commit(commit_msg):
+def build_package_from_commit(commit_msg, output_file):
     """
         Parse the commit message for the package.xml
     """
     pattern = r'(<\?xml.*?\?>.*?</Package>)'
     matches = re.findall(pattern, commit_msg, re.DOTALL)
+    package_path = None
     if matches:
         package_xml_content = matches[0]
         logging.info('Found package.xml contents in the commit message.')
-        with open('package.xml', 'w', encoding='utf-8') as package_file:
+        with open(output_file, 'w', encoding='utf-8') as package_file:
             package_file.write(package_xml_content.strip())
-        return 'package.xml'
+        package_path = output_file
     else:
-        logging.info('Did not find package.xml contents in the commit message.')
+        logging.info('Package.xml contents NOT found in the commit message.')
         return None
+    return package_path
 
 
 def parse_package_file(package_path, changes, ignore_api_version):
@@ -89,15 +90,15 @@ def run_command(cmd):
         sys.exit(1)
 
 
-def create_metadata_dict(from_ref, to_ref, delta, commit_msg):
+def create_metadata_dict(from_ref, to_ref, plugin_package, commit_msg, output_file):
     """
         Create a dictionary with all metadata types.
     """
     run_command(f'sf sgd:source:delta --to "{to_ref}"'
                 f' --from "{from_ref}" --output "."')
     metadata = {}
-    metadata, api_version = parse_package_file(delta, metadata, True)
-    mr_package = build_package_from_commit(commit_msg)
+    metadata, api_version = parse_package_file(plugin_package, metadata, True)
+    mr_package = build_package_from_commit(commit_msg, output_file)
     if mr_package:
         metadata, api_version = parse_package_file(mr_package, metadata, False)
     return metadata, api_version
@@ -133,15 +134,15 @@ def create_package_file(items, api_version, output_file):
         package_file.write(package_contents)
 
 
-def main(from_ref, to_ref, delta, message, combined):
+def main(from_ref, to_ref, plugin, message, output):
     """
         Main function to build the deployment package
     """
-    metadata_dict, api_version = create_metadata_dict(from_ref, to_ref, delta, message)
-    create_package_file(metadata_dict, api_version, combined)
+    metadata_dict, api_version = create_metadata_dict(from_ref, to_ref, plugin, message, output)
+    create_package_file(metadata_dict, api_version, output)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
     main(inputs.from_ref, inputs.to_ref,
-         inputs.delta, inputs.message, inputs.combined)
+         inputs.plugin, inputs.message, inputs.output)

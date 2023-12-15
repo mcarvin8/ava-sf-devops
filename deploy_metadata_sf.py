@@ -9,26 +9,26 @@ import sys
 import threading
 
 
-# format logger
+# Format logging message
 logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
 
 def parse_args():
     """
-        Function to parse required arguments.
-        tests - required Apex tests to run against
+        Function to pass required arguments.
+        tests - Define required Apex test classes to execute.
         manifest - path to the package.xml file
-        wait - number of minutes to wait for command to complete
+        wait - Number of minutes to wait for the command to complete.
         environment - Salesforce environment URL
         pipeline - pipeline type (push or merge_request_event)
         log - deploy log where the output of this script is being written to
             python ./deploy_metadata_sfdx.py --args | tee -a deploy_log.txt
             -a flag required to append to file during run-time
-        validate - set to True to run validation only deployment (for quick deploys)
-        debug - print command rather than run
+        validate - Set to true to run a check-only deployment
+        debug - Optional. Print to the terminal rather than run.
     """
-    parser = argparse.ArgumentParser(description='A script to deploy metadata to Salesforce.')
-    parser.add_argument('-t', '--tests', default='not a test')
+    parser = argparse.ArgumentParser(description='A script to deploy metadata to salesforce.')
+    parser.add_argument('-t', '--tests')
     parser.add_argument('-m', '--manifest', default='manifest/package.xml')
     parser.add_argument('-w', '--wait', default=33)
     parser.add_argument('-e', '--environment')
@@ -38,16 +38,6 @@ def parse_args():
     parser.add_argument('-d', '--debug', default=False, action='store_true')
     args = parser.parse_args()
     return args
-
-
-def run_command(cmd):
-    """
-        Function to run the command using the native shell.
-    """
-    try:
-        subprocess.run(cmd, check=True, shell=True)
-    except subprocess.CalledProcessError:
-        sys.exit(1)
 
 
 def create_sf_link(sf_env, log, result):
@@ -65,16 +55,35 @@ def create_sf_link(sf_env, log, result):
         while True:
             file_line = deploy_file.readline()
             match = re.search(pattern, file_line)
-            # if regex is found, build the link and break the loop
+            # if regex is found, break the loop
             if match:
                 deploy_id = match.group(1)
                 break
 
+    # log the URL and store the validate ID
     if deploy_id:
         sf_id = deploy_id[:-3]
         deploy_url = f'{sf_env}{classic_sf_path}{sf_id}'
         logging.info(deploy_url)
         result['deploy_id'] = deploy_id
+
+
+def create_empty_file(file_path):
+    """
+        Function to create an empty file
+    """
+    with open(file_path, 'w', encoding='utf-8'):
+        pass
+
+
+def run_command(cmd):
+    """
+        Function to run the command using the native shell.
+    """
+    try:
+        subprocess.run(cmd, check=True, shell=True)
+    except subprocess.CalledProcessError:
+        sys.exit(1)
 
 
 def quick_deploy(deploy_id, wait, environment, log, result):
@@ -91,27 +100,17 @@ def quick_deploy(deploy_id, wait, environment, log, result):
     run_command(command)
 
 
-def create_empty_file(file_path):
-    """
-        Function to create an empty file
-    """
-    # overwrite any existing file
-    with open(file_path, 'w', encoding='utf-8'):
-        pass
-
-
 def main(testclasses, manifest, wait, environment, log, pipeline, validate, debug):
     """
-        Main function to deploy metadata to Salesforce.
+        Main function to deploy to salesforce.
     """
-    # Define the command
-    command = (f'{f"sf project deploy validate -l RunSpecifiedTests -t {testclasses}" if (validate and testclasses != "not a test") else "sf project deploy start"}'
-                f'{" --dry-run" if (validate and testclasses == "not a test") else ""}'
-                f' -x {manifest} -w {wait} --verbose'
-                f'{" --coverage-formatters json --results-dir coverage" if (validate and testclasses != "not a test" and pipeline != "push") else ""}')
+    apex = testclasses != "not a test"
+    command = (f'{f"sf project deploy validate -l RunSpecifiedTests -t {testclasses}" if (validate and apex) else "sf project deploy start"}'
+                f'{" --dry-run" if (validate and not apex) else ""}'
+                f' -x {manifest} -w {wait} --verbose')
     logging.info(command)
 
-    if validate and testclasses == 'not a test' and pipeline == 'push':
+    if validate and not apex and pipeline == 'push':
         logging.info('Not running validation deployment without test classes.')
         return
 
@@ -135,7 +134,7 @@ def main(testclasses, manifest, wait, environment, log, pipeline, validate, debu
     run_command(command)
     # run quick-deploy after a validation on a push pipeline (apex)
     if validate and pipeline == 'push':
-        # re-write log before quick-deploy
+        # overwrite existing log from validation
         create_empty_file(log)
         quick_deploy(result.get('deploy_id'), wait, environment, log, result)
 
