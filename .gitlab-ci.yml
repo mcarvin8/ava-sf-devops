@@ -95,7 +95,7 @@ quality:
 .authenticate:
   before_script:
     # install latest plugin
-    - echo y | sfdx plugins:install sfdx-git-delta
+    - echo y | sf plugins:install sfdx-git-delta
     # Copy version JSON output for any Salesforce cases
     - sf version --verbose --json
     - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -c $DEPLOY_PACKAGE -m "$CI_COMMIT_MESSAGE"
