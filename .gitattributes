@@ -1,0 +1,14 @@
+# Normalize all text file line endings to LF.
+* text=auto eol=lf
+
+# List all files that are almost always binary (e.g Static Resources).
+*.resource binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.svg binary
+
+# List all binary exceptions here (e.g. Static Resources that are just text).
+*_html.resource text eol=lf
+*_css.resource text eol=lf
+*_js.resource text eol=lf
