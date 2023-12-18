@@ -25,7 +25,7 @@ def parse_args():
         manifest - path to the package.xml file
     """
     parser = argparse.ArgumentParser(description='A script to check for Apex types.')
-    parser.add_argument('-t', '--tests', default='not,a,test')
+    parser.add_argument('-t', '--tests', default='not a test')
     parser.add_argument('-m', '--manifest', default='manifest/package.xml')
     args = parser.parse_args()
     return args
