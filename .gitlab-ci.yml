@@ -63,11 +63,12 @@ build:
 ####################################################
 .authenticate:
   before_script:
-    - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
     - echo y | sf plugins:install sfdx-git-delta
     - python3 ./create_deploy_package.py -f $CI_COMMIT_BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$CI_COMMIT_MESSAGE"
     - source_folder=$(python3 ./check_package_dir.py)
+    - python3 ./authenticate_sfdx.py --alias $AUTH_ALIAS --url $AUTH_URL
     - testclasses=$(python3 ./apex_tests.py --tests "$CI_COMMIT_MESSAGE" --manifest $DEPLOY_PACKAGE)
+
 
 ####################################################
 # Validate metadata in a Salesforce org.

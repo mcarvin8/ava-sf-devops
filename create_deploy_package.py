@@ -1,8 +1,5 @@
 """
-  This script uses the SFDX git delta plugin to create the delta
-  package. Then, it combines the delta XML file with the package.xml
-  contents found in the Merge Request description/commit message
-  to create the final deployment package.
+    Build the deployment package.xml
 """
 import argparse
 import logging
@@ -40,7 +37,7 @@ def build_package_from_commit(commit_msg, output_file):
     """
         Parse the commit message for the package.xml
     """
-    pattern = r'(<\?xml.*?\?>.*?</Package>)'
+    pattern = r'(<Package xmlns=".*?">.*?</Package>)'
     matches = re.findall(pattern, commit_msg, re.DOTALL)
     package_path = None
     if matches:
@@ -50,7 +47,7 @@ def build_package_from_commit(commit_msg, output_file):
             package_file.write(package_xml_content.strip())
         package_path = output_file
     else:
-        logging.info('Package.xml contents NOT found in the commit message.')
+        logging.info('WARNING: Package.xml contents NOT found in the commit message.')
         return None
     return package_path
 
@@ -86,21 +83,31 @@ def run_command(cmd):
     """
     try:
         subprocess.run(cmd, check=True, shell=True)
+        return True
     except subprocess.CalledProcessError:
-        sys.exit(1)
+        logging.info('WARNING: The plugin was unable to build the package.xml from the git diff.')
+        logging.info('Confirm the commit changed files in the `force-app` directory.')
+        return False
 
 
 def create_metadata_dict(from_ref, to_ref, plugin_package, commit_msg, output_file):
     """
         Create a dictionary with all metadata types.
     """
-    run_command(f'sf sgd:source:delta --to "{to_ref}"'
+    sgd_package = run_command(f'sf sgd:source:delta --to "{to_ref}"'
                 f' --from "{from_ref}" --output "."')
     metadata = {}
-    metadata, api_version = parse_package_file(plugin_package, metadata, True)
+    if sgd_package:
+        metadata, api_version = parse_package_file(plugin_package, metadata, True)
+
     mr_package = build_package_from_commit(commit_msg, output_file)
     if mr_package:
         metadata, api_version = parse_package_file(mr_package, metadata, False)
+    if not sgd_package and not mr_package:
+        logging.info('ERROR: A package.xml was unable to be created via the plugin or the commit message.')
+        logging.info('A) Confirm the commit changed files in the `force-app` directory.')
+        logging.info('/OR/ B) Confirm the commit message contains package.xml contents .')
+        sys.exit(1)
     return metadata, api_version
 
 
