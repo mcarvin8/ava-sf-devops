@@ -86,7 +86,6 @@ def run_command(cmd):
         return True
     except subprocess.CalledProcessError:
         logging.info('WARNING: The plugin was unable to build the package.xml from the git diff.')
-        logging.info('Confirm the commit changed files in the `force-app` directory.')
         return False
 
 
@@ -104,9 +103,8 @@ def create_metadata_dict(from_ref, to_ref, plugin_package, commit_msg, output_fi
     if mr_package:
         metadata, api_version = parse_package_file(mr_package, metadata, False)
     if not sgd_package and not mr_package:
-        logging.info('ERROR: A package.xml was unable to be created via the plugin or the commit message.')
-        logging.info('A) Confirm the commit changed files in the `force-app` directory.')
-        logging.info('/OR/ B) Confirm the commit message contains package.xml contents .')
+        logging.info('ERROR: The package.xml was unable to be created via the plugin or the commit message.')
+        logging.info('A) Confirm the commit changed metadata in the `force-app` directory. /OR/ B) Confirm the commit message contains package.xml contents.')
         sys.exit(1)
     return metadata, api_version
 
