@@ -10,6 +10,7 @@ The pipeline is divided into the following stages:
 - The `build` stage builds a Docker image for the org if the `Dockerfile` has been modified. This Docker image is pushed to the GitLab repository's Container Registry.
 - The `validate` stage contains jobs for each org. When a merge request is opened against one of the org branches, it will validate the changes in the org.
     - This has been confirmed on GitLab Merge Request Pipelines (standard pipeline - defaults to this when there are merge conflicts) and Merged Results Pipelines (when there are no conflicts and this setting is enabled in the repo)
+    - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the tests and package in the MR description.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
 ## Declare Metadata
