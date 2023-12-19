@@ -32,8 +32,6 @@ build:
   services:
     - docker:20.10.16-dind  
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: never
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa'
@@ -111,8 +109,6 @@ validate-dev:
   stage: validate
   resource_group: develop
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
@@ -134,8 +130,6 @@ dev:
   stage: deploy
   resource_group: develop
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $SANDBOX_DISABLED
@@ -162,8 +156,6 @@ validate-fullqa:
   stage: validate
   resource_group: fullqa
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
@@ -186,8 +178,6 @@ fullqa:
   stage: deploy
   resource_group: fullqa
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $FULLQA_DISABLED
@@ -213,8 +203,6 @@ validate-prod:
   stage: validate
   resource_group: production
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -236,8 +224,6 @@ production:
   stage: deploy
   resource_group: production
   rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: never
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $PRODUCTION_DISABLED
