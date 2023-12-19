@@ -19,8 +19,8 @@ stages:
 variables:
   DEPLOY_TIMEOUT: 240
   DEPLOY_LOG: deploy_log.txt
-  DEPLOY_PACKAGE: deploy.xml
- # Update webhook URL here for your slack channel
+  DEPLOY_PACKAGE: package.xml
+  # Update webhook URL here for your slack channel
   SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 
 ####################################################
