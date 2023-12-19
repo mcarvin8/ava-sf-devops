@@ -16,8 +16,10 @@ ENV SF_AUTOUPDATE_DISABLE=true \
     # ^-- For force:package:version:create, disables automatic updates to the sfdx-project.json file.
     SF_DISABLE_DNS_CHECK=true \
     # ^-- Disable the DNS check done when looking for the latest API version in the org.
-    SF_DISABLE_SOURCE_MEMBER_POLLING=true
+    SF_DISABLE_SOURCE_MEMBER_POLLING=true \
     # ^-- Disable source member polling between local source and org.
+    SF_SKIP_NEW_VERSION_CHECK=true
+    # ^-- Disable the check for newer CLI versions.
 
 # Install dependencies and output versions
 RUN apt-get update && apt-get install -y curl git python3 ca-certificates curl gnupg && \
