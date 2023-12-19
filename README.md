@@ -26,7 +26,8 @@ The following updates must be made to your GitLab repository:
 - The default merge request description template should be updated to include the required Apex string template.
 - The default merge request description template should be updated to include the package.xml header and footer.
 ![Default Merge Request Description](default-mr-description.JPG)
-- Enable Merged Results Pipelines for the `validate` stage
+- Enable Merged Results Pipelines 
+![Merged Results Setting](merged-results.png)
 
 The plugin manifest file and the manual manifest file will be merged to create the final deployment package.
 
