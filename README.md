@@ -9,7 +9,7 @@ The pipeline is divided into several stages:
 
 - The `build` stage builds a Docker image for the org if the Dockerfile has been modified. This Docker image is pushed to the GitLab Container Registry for the repository.
 - The `validate` stage consists of 3 jobs that represent 3 Salesforce orgs which have their own long-running branch. When a merge request is opened against one of these branches, it will validate the changes in the org.
-    - This stage will create a code coverage XML for SonarQube if validating an Apex package. The JSON file created by the SF CLI validation command is not accepted by SQ automatically. The JSON is convereted to the Generic Test Coverage Format (https://docs.sonarsource.com/sonarqube/9.9/analyzing-source-code/test-coverage/generic-test-data/)
+    - This has been confirmed on GitLab Merge Request Pipelines (standard pipeline - defaults to this when there are merge conflicts) and Merged Results Pipelines (when there are no conflicts and this setting is enabled in the repo)
 - The `deploy` stage consists of 3 jobs that will deploy the metadata to the assigned org after a merge into the long-running branch.
 
 ## Declare Metadata
