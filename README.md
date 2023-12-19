@@ -1,5 +1,5 @@
 # Salesforce Org Model for GitLab CI/CD using the SF Executable
-This repository contains Python scripts that demonstrate how to use GitLab actions to validate and deploy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. 
+This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom Python scripts to validate and deploy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. 
 
 Each Salesforce org has its own long-running Git branch.
 
