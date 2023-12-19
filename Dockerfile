@@ -27,5 +27,4 @@ RUN apt-get update && apt-get install -y curl git python3 ca-certificates curl g
     apt-get update && \
     apt-get install -y nodejs && \
     npm install --global @salesforce/cli@latest && \
-    sf version --verbose --json && \
-    git --version
+    sf version --verbose --json
