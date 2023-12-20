@@ -14,6 +14,7 @@ cache:
 stages: 
   - build
   - validate
+  - destroy
   - deploy
 
 variables:
@@ -101,9 +102,21 @@ build:
     - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --hook "$SLACK_WEBHOOK_URL"
 
 ####################################################
+# Delete metadata in a Salesforce org.
+####################################################
+.delete-metadata:
+  script:
+    - echo y | sf plugins:install sfdx-git-delta
+    - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - python3 ./delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
+  after_script:
+    - rm $DEPLOY_LOG
+
+####################################################
 # Declare configuration settings for the sandbox org.
 ####################################################
 validate-dev:
+  image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
   resource_group: develop
@@ -127,6 +140,7 @@ validate-dev:
     - aws,prd,us-west-2
 
 dev:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .deploy-metadata
   stage: deploy
   resource_group: develop
@@ -143,6 +157,29 @@ dev:
     AUTH_URL: $SANDBOX_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
+  environment:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy-dev:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  extends: .delete-metadata
+  stage: destroy
+  resource_group: develop
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
+    - if: $SANDBOX_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == 'develop'
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
     name: sandbox
     url: https://avalara--dev.sandbox.my.salesforce.com
@@ -200,6 +237,29 @@ fullqa:
   tags: 
     - aws,prd,us-west-2
 
+destroy-fullqa:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  extends: .delete-metadata
+  stage: destroy
+  resource_group: fullqa
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
+    - if: $FULLQA_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == 'fullqa'
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: FULLQA
+    AUTH_URL: $FULLQA_AUTH_URL
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+  environment:
+    name: fullqa
+    url: https://avalara--fullqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
 ####################################################
 # Declare configuration settings for the production org.
 ####################################################
@@ -243,6 +303,28 @@ production:
     AUTH_URL: $PRODUCTION_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
+  environment:
+    name: production
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy-prod:
+  extends: .delete-metadata
+  stage: destroy
+  resource_group: production
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: never
+    - if: $PRODUCTION_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
     name: production
     url: https://avalara.my.salesforce.com
