@@ -17,7 +17,7 @@ def parse_args():
     parser.add_argument('-j', '--job')
     parser.add_argument('-c', '--commit')
     parser.add_argument('-e', '--environment')
-    parser.add_argument('-h', '--hook')
+    parser.add_argument('-w', '--webhook')
     args = parser.parse_args()
     return args
 
@@ -83,16 +83,16 @@ def share_slack_update_build(payload_info, slack_webhook):
         pass
 
 
-def main(user, environment, commit, project, status, job, hook):
+def main(user, environment, commit, project, status, job, webhook):
     """
         Main function
     """
     payload_info = print_slack_summary_build(user, environment, commit, project, status, job)
-    share_slack_update_build(payload_info, hook)
+    share_slack_update_build(payload_info, webhook)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
     main(inputs.user, inputs.environment, inputs.commit,
          inputs.project, inputs.status, inputs.job,
-         inputs.hook)
+         inputs.webhook)
