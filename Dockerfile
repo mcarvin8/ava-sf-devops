@@ -18,8 +18,10 @@ ENV SF_AUTOUPDATE_DISABLE=true \
     # ^-- Disable the DNS check done when looking for the latest API version in the org.
     SF_DISABLE_SOURCE_MEMBER_POLLING=true \
     # ^-- Disable source member polling between local source and org.
-    SF_SKIP_NEW_VERSION_CHECK=true
+    SF_SKIP_NEW_VERSION_CHECK=true \
     # ^-- Disable the check for newer CLI versions.
+    NODE_MAJOR=20
+    # ^-- Update for version of Node to install below
 
 # Install dependencies and output versions
 RUN apt-get update && apt-get install -y curl git python3 ca-certificates curl gnupg && \
