@@ -26,10 +26,20 @@ def print_slack_summary_build(user, environment, commit, project, status, job):
     """
         Build the payload
     """
-    slack_msg_header = f":x: *Deployment to {environment} failed*"
+    # ALl pre-defined validate environments start with `validate-`
+    if 'validate' in environment:
+        environment = environment.replace('validate-', '')
+        pipeline_description = f'Validation against {environment}'
+    else:
+        pipeline_description = f'Deployment to {environment}'
+
     # GitLab's CI_JOB_STATUS will be set to "success" for a successful job
+    # Update for other CI environments
     if status == "success":
-        slack_msg_header = f":heavy_green_checkmark: *Deployment to {environment} succeeded*"
+        slack_msg_header = f":heavy_green_checkmark: *{pipeline_description} succeeded*"
+    else:
+        slack_msg_header = f":x: *{pipeline_description} failed*"
+
 
     slack_msg_body = {
         "blocks": [

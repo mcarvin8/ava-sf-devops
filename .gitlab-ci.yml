@@ -81,6 +81,7 @@ build:
   script:
     - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
   after_script:
+    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
 
@@ -97,9 +98,9 @@ build:
       else python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
       fi
   after_script:
+    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
-    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
 
 ####################################################
 # Delete metadata in a Salesforce org.
