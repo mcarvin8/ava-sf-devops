@@ -15,6 +15,13 @@ The pipeline is divided into the following stages:
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
+The deployment and validation status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
+
+``` yaml
+  # Update webhook URL here for your slack channel
+  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
+```
+
 ## Declare Metadata to Deploy
 
 This org model uses a manifest file (package.xml) to run delta deployments. By default, the SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
@@ -51,3 +58,18 @@ In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the 
 ### Code Owners
 
 Update the `CODEOWNERS` file in this repo to define the owners of your code base. Enforce `CODEOWNERS` approval in merge requests to prevent a merge request from being accepted wtihout code owner approval.
+
+## Other CI/CD Platforms
+
+The Python scripts can be used on other CI/CD platforms as-is. Reference the arguments passed to the Python scripts in the sample `.gitlab-ci.yml`.
+
+The only Python script which requires a modifiction is `deploy_slack_status.py`. The job status string should be updated to match your platform:
+
+``` python
+    # GitLab's CI_JOB_STATUS will be set to "success" for a successful job
+    # Update for other CI environments
+    if status == "success":
+        slack_msg_header = f":heavy_green_checkmark: *{pipeline_description} succeeded*"
+    else:
+        slack_msg_header = f":x: *{pipeline_description} failed*"
+```
