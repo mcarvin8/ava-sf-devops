@@ -41,3 +41,13 @@ Apex tests will be declared in the commit message with the following expression:
 `Apex::Class1,Class2,Class3::Apex`
 
 The entire "Apex" string is case insensitive. Test classes can be separated by commas or spaces. If your Apex Test Class naming convention allows spaces, adjust the regex in the `apex_tests.py` script.
+
+## Branch Protection
+
+### Validation Merge Request Pipelines
+
+In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted.
+
+### Code Owners
+
+Update the `CODEOWNERS` file in this repo to define the owners of your code base. Enforce `CODEOWNERS` approval in merge requests to prevent a merge request from being accepted wtihout code owner approval.
