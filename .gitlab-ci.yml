@@ -13,6 +13,7 @@ cache:
 
 stages: 
   - build
+  - backfill
   - validate
   - destroy
   - deploy
@@ -54,6 +55,23 @@ build:
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER $CI_REGISTRY --password-stdin
     - docker build --tag $IMAGE_TAG .
     - docker push $IMAGE_TAG
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Push production commits back to sandbox branches.
+# This will skip CI pipelines when pushing to GitLab.
+# Allowed to fail in order to not block a production pipeline.
+####################################################
+prodBackfill:
+  stage: backfill
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+    - when: never
+  allow_failure: true
+  script:
+    - source ./scripts/bash/merge_main_into_sbx_cicd.sh
   tags: 
     - aws,prd,us-west-2
 
