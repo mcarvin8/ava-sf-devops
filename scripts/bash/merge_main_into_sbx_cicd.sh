@@ -41,7 +41,7 @@ do
     git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}" -o ci.skip
 done
 
-# Cleanup, switch back to original branch and delete local branches
-git checkout main
+# Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
+git checkout $CI_COMMIT_SHORT_SHA
 git branch -D fullqa
 git branch -D develop
