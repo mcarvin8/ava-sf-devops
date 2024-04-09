@@ -22,16 +22,15 @@ function accept_incoming_changes_merge() {
 # Must fetch before checking out fullqa and develop branches
 # Configure bot user name and bot user email address for this project access token
 # Bot Email Address template: project_{project_id}_bot_{random_string}@noreply.{Gitlab.config.gitlab.host}
-git reset --hard
-git fetch
+git fetch -q
 git config user.name "${BOT_NAME}"
 git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
 
 # Update the sandbox branches with changes from production
 for branch_name in fullqa develop
 do
-    git checkout $branch_name
-    git pull --ff
+    git checkout -q $branch_name
+    git pull --ff -q
     # Merge changes from main branch, ignoring merge conflict errors
     git merge --no-ff origin/main || true
     accept_incoming_changes_merge "$branch_name"
@@ -40,6 +39,6 @@ do
 done
 
 # Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
-git checkout $CI_COMMIT_SHORT_SHA
+git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
 git branch -D fullqa
 git branch -D develop
