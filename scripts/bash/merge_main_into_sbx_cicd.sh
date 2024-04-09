@@ -16,8 +16,6 @@ function accept_incoming_changes_merge() {
             git add "$file"
         done < <(git diff --name-only --diff-filter=U -z)
         git commit -m "Merge remote-tracking branch 'origin/main' into $1"
-    else
-        echo "No merge conflicts detected. Continuing without resolving conflicts."
     fi
 }
 
