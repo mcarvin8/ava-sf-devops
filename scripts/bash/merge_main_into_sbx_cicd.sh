@@ -38,7 +38,7 @@ do
     git merge --no-ff origin/main || true
     accept_incoming_changes_merge "$branch_name"
     # Push changes to remote, skipping CI pipeline
-    git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}" -o ci.skip
+    git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" -o ci.skip
 done
 
 # Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
