@@ -36,12 +36,12 @@ The package.xml contents in the Merge Request should be used to declare any meta
 
 The following updates must be made to your GitLab repository:
 - The default merge commit message should be updated to include the description of the MR for UI merges.
-![Merge Request Commit Message Template](mr-commit-message-template.JPG)
+![Merge Request Commit Message Template](.gitlab/images/mr-commit-message-template.JPG)
 - The default merge request description template should be updated to include the required Apex string template.
 - The default merge request description template should be updated to include the package.xml header and footer.
-![Default Merge Request Description](default-mr-description.JPG)
+![Default Merge Request Description](.gitlab/images/default-mr-description.JPG)
 - Enable Merged Results Pipelines 
-![Merged Results Setting](merged-results.png)
+![Merged Results Setting](.gitlab/images/merged-results.png)
 
 The plugin manifest file and the manual manifest file will be merged to create the final deployment package.
 

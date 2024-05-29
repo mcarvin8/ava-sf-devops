@@ -81,10 +81,10 @@ prodBackfill:
 .authenticate:
   before_script:
     - echo y | sf plugins:install sfdx-git-delta
-    - python3 ./create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
-    - source_folder=$(python3 ./check_package_dir.py)
-    - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
-    - testclasses=$(python3 ./apex_tests.py --tests "$COMMIT_MSG" --manifest $DEPLOY_PACKAGE)
+    - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
+    - source_folder=$(python3 ./scripts/python/check_package_dir.py)
+    - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - testclasses=$(python3 ./scripts/python/apex_tests.py --tests "$COMMIT_MSG" --manifest $DEPLOY_PACKAGE)
 
 ####################################################
 # Validate metadata in a Salesforce org.
@@ -97,9 +97,9 @@ prodBackfill:
       - .sf/
       - .sfdx/
   script:
-    - python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
+    - python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
   after_script:
-    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
+    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
 
@@ -112,11 +112,11 @@ prodBackfill:
     # full-deploy if deploying non-apex
     # validate and quick-deploy if deploying apex
     - if [ "$testclasses" == "not a test" ];
-      then python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG  | tee -a $DEPLOY_LOG;
-      else python3 ./deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
+      then python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG  | tee -a $DEPLOY_LOG;
+      else python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
       fi
   after_script:
-    - python3 ./deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
+    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
     - rm $DEPLOY_PACKAGE
     - rm $DEPLOY_LOG
 
@@ -126,8 +126,8 @@ prodBackfill:
 .delete-metadata:
   script:
     - echo y | sf plugins:install sfdx-git-delta
-    - python3 ./authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
-    - python3 ./delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
+    - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - python3 ./scripts/python/delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
   after_script:
     - rm $DEPLOY_LOG
 
