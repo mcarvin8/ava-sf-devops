@@ -1,4 +1,4 @@
-# Salesforce Org Model for GitLab CI/CD using the SF Executable
+# Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
 This repository demonstrates how to use GitLab actions, the Salesforce CLI, the SFDX git delta plugin, and custom Python scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. 
 
 Each Salesforce org has its own long-running Git branch.
@@ -81,3 +81,5 @@ The only Python script which requires a modifiction is `deploy_slack_status.py`.
 ## Bot Deployments
 
 To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
+
+If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
