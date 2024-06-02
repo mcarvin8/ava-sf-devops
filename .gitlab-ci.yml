@@ -3,7 +3,7 @@
 # in the GitLab repo's container registry.
 # This image can be overriden by job-specific images.
 ####################################################
-image: $CI_REGISTRY_IMAGE:production
+image: $CI_REGISTRY_IMAGE:prd
 
 cache:
   key: ${CI_COMMIT_REF_NAME}
@@ -36,7 +36,7 @@ build:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa'
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'dev' || $CI_COMMIT_REF_NAME == 'fqa'
       changes:
         - Dockerfile
       when: always
@@ -51,7 +51,7 @@ build:
   before_script:
     - until docker info; do sleep 1; done
   script:
-    - if [ $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH ]; then IMAGE_TAG=$CI_REGISTRY_IMAGE:production; fi
+    - if [ $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH ]; then IMAGE_TAG=$CI_REGISTRY_IMAGE:prd; fi
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER $CI_REGISTRY --password-stdin
     - docker build --tag $IMAGE_TAG .
     - docker push $IMAGE_TAG
@@ -61,7 +61,6 @@ build:
 ####################################################
 # Push production commits back to sandbox branches.
 # This will skip CI pipelines when pushing to GitLab.
-# Allowed to fail in order to not block a production pipeline.
 ####################################################
 prodBackfill:
   stage: backfill
@@ -71,7 +70,7 @@ prodBackfill:
     - when: never
   allow_failure: true
   script:
-    - source ./scripts/bash/merge_main_into_sbx_cicd.sh
+    - source ./scripts/bash/merge_main_into_sbx.sh
   tags: 
     - aws,prd,us-west-2
 
@@ -132,17 +131,17 @@ prodBackfill:
     - rm $DEPLOY_LOG
 
 ####################################################
-# Declare configuration settings for the sandbox org.
+# Declare jobs for the sandbox org.
 ####################################################
-validate-dev:
+validate:dev:
   image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
-  resource_group: develop
+  resource_group: dev
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'dev'
       when: manual
   allow_failure: false
   variables:
@@ -158,17 +157,17 @@ validate-dev:
   tags: 
     - aws,prd,us-west-2
 
-dev:
+deploy:dev:
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .deploy-metadata
   stage: deploy
-  resource_group: develop
+  resource_group: dev
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $SANDBOX_DISABLED
       when: never
-    - if: $CI_COMMIT_REF_NAME == 'develop'
+    - if: $CI_COMMIT_REF_NAME == 'dev'
       when: always
   allow_failure: false
   variables:
@@ -182,17 +181,17 @@ dev:
   tags: 
     - aws,prd,us-west-2
 
-destroy-dev:
+destroy:dev:
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .delete-metadata
   stage: destroy
-  resource_group: develop
+  resource_group: dev
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
     - if: $SANDBOX_DISABLED
       when: never
-    - if: $CI_COMMIT_REF_NAME == 'develop'
+    - if: $CI_COMMIT_REF_NAME == 'dev'
       when: always
   allow_failure: true
   variables:
@@ -206,95 +205,95 @@ destroy-dev:
     - aws,prd,us-west-2
 
 ####################################################
-# Declare configuration settings for the fullqa org.
+# Declare jobs for the fqa org.
 ####################################################
-validate-fullqa:
+validate:fqa:
   image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
-  resource_group: fullqa
+  resource_group: fqa
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fqa'
       when: manual
   allow_failure: false
   variables:
-    AUTH_ALIAS: FULLQA
-    AUTH_URL: $FULLQA_AUTH_URL
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
     # If you are working on GitLab v16.6, switch to CI_MERGE_REQUEST_DESCRIPTION
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
-    name: validate-fullqa
-    url: https://avalara--fullqa.sandbox.my.salesforce.com
+    name: validate-fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
-fullqa:
+deploy:fqa:
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .deploy-metadata
   stage: deploy
-  resource_group: fullqa
+  resource_group: fqa
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $FULLQA_DISABLED
+    - if: $FQA_DISABLED
       when: never
-    - if: $CI_COMMIT_REF_NAME == 'fullqa'
+    - if: $CI_COMMIT_REF_NAME == 'fqa'
       when: always
   allow_failure: false
   variables:
-    AUTH_ALIAS: FULLQA
-    AUTH_URL: $FULLQA_AUTH_URL
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
-    name: fullqa
-    url: https://avalara--fullqa.sandbox.my.salesforce.com
+    name: fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
-destroy-fullqa:
+destroy:fqa:
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .delete-metadata
   stage: destroy
-  resource_group: fullqa
+  resource_group: fqa
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $FULLQA_DISABLED
+    - if: $FQA_DISABLED
       when: never
-    - if: $CI_COMMIT_REF_NAME == 'fullqa'
+    - if: $CI_COMMIT_REF_NAME == 'fqa'
       when: always
   allow_failure: true
   variables:
-    AUTH_ALIAS: FULLQA
-    AUTH_URL: $FULLQA_AUTH_URL
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
-    name: fullqa
-    url: https://avalara--fullqa.sandbox.my.salesforce.com
+    name: fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
 ####################################################
-# Declare configuration settings for the production org.
+# Declare jobs for the production org.
 ####################################################
-validate-prod:
+validate:prd:
   extends: .validate-metadata
   stage: validate
-  resource_group: production
+  resource_group: prd
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: manual
   allow_failure: false
   variables:
-    AUTH_ALIAS: PRODUCTION
-    AUTH_URL: $PRODUCTION_AUTH_URL
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
     # If you are working on GitLab v16.6, switch to CI_MERGE_REQUEST_DESCRIPTION
@@ -305,47 +304,47 @@ validate-prod:
   tags: 
     - aws,prd,us-west-2
 
-production:
+deploy:prd:
   extends: .deploy-metadata
   stage: deploy
-  resource_group: production
+  resource_group: prd
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $PRODUCTION_DISABLED
+    - if: $PRD_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: false
   variables:
-    AUTH_ALIAS: PRODUCTION
-    AUTH_URL: $PRODUCTION_AUTH_URL
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
-    name: production
+    name: prd
     url: https://avalara.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
-destroy-prod:
+destroy:prd:
   extends: .delete-metadata
   stage: destroy
-  resource_group: production
+  resource_group: prd
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       when: never
-    - if: $PRODUCTION_DISABLED
+    - if: $PRD_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: true
   variables:
-    AUTH_ALIAS: PRODUCTION
-    AUTH_URL: $PRODUCTION_AUTH_URL
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
-    name: production
+    name: prd
     url: https://avalara.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
