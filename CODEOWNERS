@@ -6,7 +6,6 @@
 .gitignore
 .gitlab-ci.yml
 .vscode/*
-Dockerfile
 config/*
 package.json
 sfdx-project.json

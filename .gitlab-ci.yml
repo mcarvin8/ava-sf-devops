@@ -1,18 +1,10 @@
-####################################################
-# By default, use the current production image hosted
-# in the GitLab repo's container registry.
-# This image can be overriden by job-specific images.
-####################################################
-image: $CI_REGISTRY_IMAGE:prd
-
 cache:
   key: ${CI_COMMIT_REF_NAME}
   paths:
     - .sf/
     - .sfdx/
 
-stages: 
-  - build
+stages:
   - backfill
   - validate
   - destroy
@@ -24,39 +16,6 @@ variables:
   DEPLOY_PACKAGE: package.xml
   # Update webhook URL here for your slack channel
   SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
-
-####################################################
-# Build a Docker image for the org.
-####################################################
-build:
-  image: docker:20.10.16
-  stage: build
-  services:
-    - docker:20.10.16-dind  
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-      when: never
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH || $CI_COMMIT_REF_NAME == 'dev' || $CI_COMMIT_REF_NAME == 'fqa'
-      changes:
-        - Dockerfile
-      when: always
-  allow_failure: false
-  variables:
-    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-    DOCKER_HOST: tcp://docker:2376 #Necessary for k8s
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: 1
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
-  # wait until docker in docker service is ready
-  before_script:
-    - until docker info; do sleep 1; done
-  script:
-    - if [ $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH ]; then IMAGE_TAG=$CI_REGISTRY_IMAGE:prd; fi
-    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER $CI_REGISTRY --password-stdin
-    - docker build --tag $IMAGE_TAG .
-    - docker push $IMAGE_TAG
-  tags: 
-    - aws,prd,us-west-2
 
 ####################################################
 # Push production commits back to sandbox branches.
@@ -75,11 +34,18 @@ prodBackfill:
     - aws,prd,us-west-2
 
 #####################################################
-# Authenticate to a Salesforce org.
+# Define a container to install the Salesforce CLI.
 ####################################################
-.authenticate:
+.salesforce-container:
+  image: ubuntu:latest
   before_script:
+    - apt-get update
+    - apt-get install -y curl git python3
+    - curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+    - apt-get install -y nodejs
+    - npm install --global @salesforce/cli@latest
     - echo y | sf plugins:install sfdx-git-delta
+    - sf version --verbose --json
     - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
     - source_folder=$(python3 ./scripts/python/check_package_dir.py)
     - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
@@ -89,7 +55,7 @@ prodBackfill:
 # Validate metadata in a Salesforce org.
 ####################################################
 .validate-metadata:
-  extends: .authenticate
+  extends: .salesforce-container
   cache:
     key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
     paths:
@@ -106,7 +72,7 @@ prodBackfill:
 # Deploy metadata into a Salesforce org.
 ####################################################
 .deploy-metadata:
-  extends: .authenticate
+  extends: .salesforce-container
   script:
     # full-deploy if deploying non-apex
     # validate and quick-deploy if deploying apex
@@ -123,9 +89,8 @@ prodBackfill:
 # Delete metadata in a Salesforce org.
 ####################################################
 .delete-metadata:
+  extends: .salesforce-container
   script:
-    - echo y | sf plugins:install sfdx-git-delta
-    - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
     - python3 ./scripts/python/delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
   after_script:
     - rm $DEPLOY_LOG
@@ -134,7 +99,6 @@ prodBackfill:
 # Declare jobs for the sandbox org.
 ####################################################
 validate:dev:
-  image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
   resource_group: dev
@@ -158,7 +122,6 @@ validate:dev:
     - aws,prd,us-west-2
 
 deploy:dev:
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .deploy-metadata
   stage: deploy
   resource_group: dev
@@ -182,7 +145,6 @@ deploy:dev:
     - aws,prd,us-west-2
 
 destroy:dev:
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .delete-metadata
   stage: destroy
   resource_group: dev
@@ -208,7 +170,6 @@ destroy:dev:
 # Declare jobs for the fqa org.
 ####################################################
 validate:fqa:
-  image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
   extends: .validate-metadata
   stage: validate
   resource_group: fqa
@@ -232,7 +193,6 @@ validate:fqa:
     - aws,prd,us-west-2
 
 deploy:fqa:
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .deploy-metadata
   stage: deploy
   resource_group: fqa
@@ -256,7 +216,6 @@ deploy:fqa:
     - aws,prd,us-west-2
 
 destroy:fqa:
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   extends: .delete-metadata
   stage: destroy
   resource_group: fqa
