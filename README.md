@@ -36,7 +36,6 @@ The package.xml contents in the Merge Request should be used to declare any meta
 The following updates must be made to your GitLab repository:
 - The default merge commit message should be updated to include the description of the MR for UI merges.
 ![Merge Request Commit Message Template](.gitlab/images/mr-commit-message-template.JPG)
-- The default merge request description template should be updated to include the required Apex string template.
 - The default merge request description template should be updated to include the package.xml header and footer.
 ![Default Merge Request Description](.gitlab/images/default-mr-description.JPG)
 - Enable Merged Results Pipelines 
@@ -47,10 +46,39 @@ The plugin manifest file and the manual manifest file will be merged to create t
 The final deployment package cannot contain wildcard characters for delta deployments. If a metadata type contains a wildcard, it will not be added to the final deployment package.
 
 ## Declare Apex Tests
-Apex tests will be declared in the commit message with the following expression:
-`Apex::Class1,Class2,Class3::Apex`
 
-The entire "Apex" string is case insensitive. Test classes can be separated by commas or spaces. If your Apex Test Class naming convention allows spaces, adjust the regex in the `apex_tests.py` script.
+To declare specified Apex tests to run when deploying Apex, you must add test annotations to each Apex class file (`*.cls`) and Apex trigger file (`*.trigger`) following the below regular expressions:
+
+- Using `@Test:` regular expression on a single line (multiple tests can be separated by commas or spaces)
+```
+/**
+ * @description       : Class used when running sandbox refreshes
+ * @author            : Matt Carvin
+ * @Tests: PrepareMySandboxTest TestB
+**/
+```
+
+- Using `@TestSuites:` regular expression on a single line (multiple tests can be separated by commas or spaces)
+
+```
+/**
+ * @description       : Class used when running sandbox refreshes
+ * @author            : Matt Carvin
+ * @TestSuites: PrepareMySandboxTest TestB
+**/
+```
+
+- Using either regular expression over multiple lines for multiple tests:
+```
+/**
+ * @description       : Class used when running sandbox refreshes
+ * @author            : Matt Carvin
+ * @TestSuites: PrepareMySandboxTest
+ * @TestSuites: TestB
+**/
+```
+
+The Apex classes and triggers will only be scanned for test annotations if the package.xml contains apex classes or triggers.
 
 ## Branch Protection
 
