@@ -110,3 +110,11 @@ The only Python script which requires a modifiction is `deploy_slack_status.py`.
 To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
 
 If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
+
+## Connected Apps
+
+The package parsing script will look for `ConnectedApp` in the package.xml and process each connected app in the package.
+
+The script will automatically remove the `<consumerKey>` line in every connected app file as consumer keys are unique in each org and will fail a deployment if left in the file.
+
+When ran in the pipeline, the changes will be discarded when the pipeline completes, so you may consumer keys staged in your repo.
