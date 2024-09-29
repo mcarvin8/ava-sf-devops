@@ -13,6 +13,8 @@ import sys
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import get_package_directories
+
 APEX_TYPES  = ['apexclass','apextrigger']
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 ns = {'sforce': 'http://soap.sforce.com/2006/04/metadata'}
@@ -164,7 +166,7 @@ def validate_version_details(root):
         sys.exit(1)
 
 
-def process_metadata_type(root: ET.Element) -> tuple:
+def process_metadata_type(root: ET.Element, package_directories: set) -> tuple:
     '''
     Iterate and process through metadata, extract details such as metadata_values
     and whether APEX is required or not
@@ -191,26 +193,37 @@ def process_metadata_type(root: ET.Element) -> tuple:
             sys.exit(1)
 
         if metadata_name.lower() == "connectedapp":
-            process_connected_app(metadata_member_list)
+            process_connected_app(metadata_member_list, package_directories)
         if metadata_name.lower() in APEX_TYPES:
-            test_classes_set = process_apex_parallel(metadata_member_list, metadata_name.lower(), test_classes_set)
+            test_classes_set = process_apex_parallel(metadata_member_list, metadata_name.lower(), test_classes_set, package_directories)
             apex_required = True
         metadata_values.append(metadata_name)
 
     return metadata_values, apex_required, test_classes_set
 
 
-def process_connected_app(metadata_member_list: list) -> None:
+def process_connected_app(metadata_member_list: list, package_directories_set: set) -> None:
     '''
     Process ConnectedApp metadata, identify the associated file, and remove the consumer key.
+    Recursively searches for the ConnectedApp file in each package directory until found.
     '''
     for member in metadata_member_list:
-        file_path = f"force-app/main/default/connectedApps/{member}.connectedApp-meta.xml"
-        if os.path.exists(file_path):
-            logging.info("Processing ConnectedApp to remove consumer key: %s", member)
-            remove_consumer_key(file_path)
-        else:
-            logging.info("ERROR: ConnectedApp file not found: %s", file_path)
+        found = False
+        for package_directory in package_directories_set:
+            # Recursively walk through the package directory to search for the connectedApp file
+            for root, _, files in os.walk(package_directory):
+                file_name = f"{member}.connectedApp-meta.xml"
+                if file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    logging.info("Processing ConnectedApp to remove consumer key: %s", member)
+                    remove_consumer_key(file_path)
+                    found = True
+                    break  # Stop searching once the file is found in one directory
+            if found:
+                break  # Stop checking other directories if the file is found
+
+        if not found:
+            logging.error("ERROR: ConnectedApp file not found for member: %s", member)
             sys.exit(1)
 
 
@@ -240,31 +253,42 @@ def remove_consumer_key(file_path: str) -> None:
         sys.exit(1)
 
 
-def process_apex_parallel(metadata_member_list: list, metadata_name: str, test_classes_set: set) -> set:
+def process_apex_parallel(metadata_member_list: list, metadata_name: str, test_classes_set: set, package_directories_set: set) -> set:
     """
     Process Apex files (.cls and .trigger) in parallel using ThreadPoolExecutor.
+    Recursively searches for the file in each package directory before running the find_apex_tests function.
     """
     if metadata_name == 'apexclass':
-        directory = 'classes'
         extension = '.cls'
     else:
-        directory = 'triggers'
         extension = '.trigger'
 
     # Automatically set max_workers based on the system's CPU count
     max_workers = os.cpu_count() * 2  # For I/O-bound tasks, use more threads
 
+    def find_apex_file(member: str) -> str:
+        """
+        Search for the Apex file recursively in each package directory.
+        """
+        for package_directory in package_directories_set:
+            for root, _, files in os.walk(package_directory):
+                file_name = f"{member}{extension}"
+                if file_name in files:
+                    return os.path.join(root, file_name)
+        raise FileNotFoundError(f"Apex file not found: {member}{extension}")
+
     # Create a thread pool executor to process files in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {
-            executor.submit(find_apex_tests, f"force-app/main/default/{directory}/{member}{extension}"): member
+        future_to_member = {
+            executor.submit(find_apex_file, member): member
             for member in metadata_member_list
         }
 
-        for future in as_completed(future_to_file):
-            member = future_to_file[future]
+        for future in as_completed(future_to_member):
+            member = future_to_member[future]
             try:
-                found_tests = future.result()
+                file_path = future.result()  # Get the file path from the future
+                found_tests = find_apex_tests(file_path)  # Run the find_apex_tests function
                 if found_tests:
                     test_classes_set.update(found_tests.split())
             except FileNotFoundError:
@@ -303,18 +327,27 @@ def find_apex_tests(file_path: str) -> str:
     return ''  # Return empty string if no matches
 
 
-def validate_tests(test_classes_set: set) -> str:
+def validate_tests(test_classes_set: set, package_directories_set: set) -> str:
     """
-    Function to validate apex test classes against the working directory.
+    Function to validate Apex test classes against the provided package directories.
+    Recursively looks for {test_class}.cls in each package directory.
     """
     valid_test_classes = []
 
     for test_class in test_classes_set:
-        class_file_path = f'force-app/main/default/classes/{test_class}.cls'
-        if os.path.isfile(class_file_path):
-            valid_test_classes.append(test_class)
-        else:
-            logging.warning('WARNING: %s is not a valid test class in the current directory.',
+        found = False
+        for package_directory in package_directories_set:
+            # Recursively walk through the package directory to search for the test class
+            for _, _, files in os.walk(package_directory):
+                if f'{test_class}.cls' in files:
+                    valid_test_classes.append(test_class)
+                    found = True
+                    break  # Stop searching once the test class is found in one directory
+            if found:
+                break  # Stop checking other directories if the test class is found
+
+        if not found:
+            logging.warning('WARNING: %s is not a valid test class in any package directory.',
                             test_class)
 
     if not valid_test_classes:
@@ -326,7 +359,7 @@ def validate_tests(test_classes_set: set) -> str:
     return ' '.join(valid_test_classes)
 
 
-def scan_package(package_path: str) -> str:
+def scan_package(package_path: str, package_directories: set) -> str:
     """
     Function to scan the package and confirm if Apex tests are required.
     """
@@ -335,11 +368,11 @@ def scan_package(package_path: str) -> str:
     validate_metadata_attributes(root)
     validate_root(local_name)
     validate_namespace(namespace)
-    metadata_values, apex_required, test_classes = process_metadata_type(root)
+    metadata_values, apex_required, test_classes = process_metadata_type(root, package_directories)
     validate_version_details(root)
     validate_emptyness(metadata_values, apex_required)
     if apex_required:
-        test_classes = validate_tests(test_classes)
+        test_classes = validate_tests(test_classes, package_directories)
     else:
         test_classes = 'not a test'
 
@@ -350,7 +383,8 @@ def main(manifest):
     """
         Main function.
     """
-    test_classes = scan_package(manifest)
+    package_directories = get_package_directories.main('sfdx-project.json')
+    test_classes = scan_package(manifest, package_directories)
     # print to terminal
     logging.info(test_classes)
     # save to bash variable

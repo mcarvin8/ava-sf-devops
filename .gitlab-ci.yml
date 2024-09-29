@@ -47,9 +47,8 @@ prodBackfill:
     - echo y | sf plugins:install sfdx-git-delta
     - sf version --verbose --json
     - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
-    - source_folder=$(python3 ./scripts/python/check_package_dir.py)
     - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
-    - testclasses=$(python3 ./scripts/python/apex_tests.py --manifest $DEPLOY_PACKAGE)
+    - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
 
 ####################################################
 # Validate metadata in a Salesforce org.
