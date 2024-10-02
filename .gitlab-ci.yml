@@ -5,7 +5,7 @@ cache:
     - .sfdx/
 
 stages:
-  - backfill
+  - pipeline
   - validate
   - destroy
   - deploy
@@ -18,11 +18,27 @@ variables:
   SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 
 ####################################################
+# Rollback pipeline.
+# Only runs on web-based pipelines on org branches when $SHA variable is provided.
+####################################################
+rollback:
+  stage: pipeline
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $SHA && ($CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa' || $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH)
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - source ./scripts/bash/rollback.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
 # Push production commits back to sandbox branches.
 # This will skip CI pipelines when pushing to GitLab.
 ####################################################
 prodBackfill:
-  stage: backfill
+  stage: pipeline
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
       when: always

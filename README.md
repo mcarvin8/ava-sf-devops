@@ -118,3 +118,16 @@ The package parsing script will look for `ConnectedApp` in the package.xml and p
 The script will automatically remove the `<consumerKey>` line in every connected app file as consumer keys are unique in each org and will fail a deployment if left in the file.
 
 When ran in the pipeline, the changes will be discarded when the pipeline completes, so you will have consumer keys staged in your repo if you dont remove them yourself after retrieval.
+
+## Roll-Back Pipeline
+
+An automated rollback pipeline has been configured using the web-based pipeline source.
+
+To rollback a deployment, 
+
+1. Identify the commit SHA which triggered the original deployment.
+2. Go to CI/CD --> Pipelines in your GitLab repo.
+3. Click the "Run pipeline" button to create a web-based pipeline.
+4. Select the applicable org branch to run against.
+5. Provide the variable key `SHA` and set its value to the commit SHA (short or full hash).
+6. Press "Run pipeline" and confirm pipeline completes. This will use the `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN` from the project access token created for the `backfill` job.
