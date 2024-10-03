@@ -4,7 +4,6 @@ set -e
 git fetch -q
 git config user.name "${BOT_NAME}"
 git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
-echo $CI_COMMIT_BRANCH
 git checkout -q $CI_COMMIT_BRANCH
 git pull --ff -q
 
@@ -17,7 +16,6 @@ fi
 
 # Check if the commit is a merge commit - this command fails when it's not a merge commit, ignore the failure
 IS_MERGE=$(git log --merges --pretty=format:"%H" | grep "$SHA" || true)
-echo "Is merge commit: $IS_MERGE"
 
 if [ -n "$IS_MERGE" ]; then
   echo "The commit $SHA is a merge commit."
