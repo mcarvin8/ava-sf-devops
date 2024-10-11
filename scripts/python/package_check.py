@@ -309,14 +309,22 @@ def find_apex_tests(file_path: str) -> str:
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             apex_file_contents = file.read()
+        test_classes = []
+
+        # Check if @isTest annotation is present, which indicates the file is an Apex test class
+        # If found, append the class file name (without the .cls extension)
+        if '@isTest' in apex_file_contents:
+            class_name = os.path.splitext(os.path.basename(file_path))[0]
+            test_classes.append(class_name)
+            return ' '.join(test_classes)
+
         # Search for @Tests or @TestSuites followed by test class list
         matches = re.findall(r'@(Tests|TestSuites)\s*:\s*([\w\s,]+)', apex_file_contents)
         if matches:
-            test_classes = []
             for _, test_list in matches:
                 cleaned_tests = re.sub(r'[\s,]+', ' ', test_list.strip())
                 test_classes.append(cleaned_tests)
-            return ' '.join(test_classes)  # Return all test classes as a single string
+            return ' '.join(test_classes)
         else:
             logging.warning("WARNING: Test annotations not found in %s. Please add @Tests or @TestSuites annotation.", file_path)
     except FileNotFoundError:

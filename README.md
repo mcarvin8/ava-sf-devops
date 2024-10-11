@@ -80,6 +80,8 @@ To declare specified Apex tests to run when deploying Apex, you must add test an
 
 The Apex classes and triggers will only be scanned for test annotations if the package.xml contains apex classes or triggers.
 
+If an Apex Test class is in your package.xml, the script will automatically append the test class name to the run tests string instead of searching for annotations. Annotations are only needed in the main Apex Classes and Apex Triggers.
+
 ## Branch Protection
 
 ### Validation Merge Request Pipelines
