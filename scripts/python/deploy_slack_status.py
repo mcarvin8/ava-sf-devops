@@ -27,7 +27,7 @@ def print_slack_summary_build(user, environment, commit, project, status, job, s
     """
         Build the payload
     """
-    if stage == 'test':
+    if stage == 'validate':
         environment = environment.replace('validate-', '')
         pipeline_description = f'Validation against {environment}'
     elif stage == 'destroy':
