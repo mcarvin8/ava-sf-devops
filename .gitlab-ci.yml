@@ -12,10 +12,9 @@ stages:
 
 variables:
   DEPLOY_TIMEOUT: 240
-  DEPLOY_LOG: deploy_log.txt
   DEPLOY_PACKAGE: package.xml
   # Update webhook URL here for your slack channel
-  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
+  SLACK_WEBHOOK: https://hooks.slack.com/services/
 
 ####################################################
 # Rollback pipeline.
@@ -60,7 +59,7 @@ prodBackfill:
     - curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
     - apt-get install -y nodejs
     - npm install --global @salesforce/cli@latest
-    - echo y | sf plugins:install sfdx-git-delta
+    - echo y | sf plugins:install sfdx-git-delta@latest
     - sf version --verbose --json
     - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
     - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
@@ -77,11 +76,10 @@ prodBackfill:
       - .sf/
       - .sfdx/
   script:
-    - python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate --pipeline $CI_PIPELINE_SOURCE | tee -a $DEPLOY_LOG
+    - python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --validate --pipeline $CI_PIPELINE_SOURCE
   after_script:
-    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
+    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
     - rm $DEPLOY_PACKAGE
-    - rm $DEPLOY_LOG
 
 ####################################################
 # Deploy metadata into a Salesforce org.
@@ -92,23 +90,24 @@ prodBackfill:
     # full-deploy if deploying non-apex
     # validate and quick-deploy if deploying apex
     - if [ "$testclasses" == "not a test" ];
-      then python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG  | tee -a $DEPLOY_LOG;
-      else python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG --validate | tee -a $DEPLOY_LOG;
+      then python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT;
+      else python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --validate;
       fi
   after_script:
-    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK_URL"
+    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK"
     - rm $DEPLOY_PACKAGE
-    - rm $DEPLOY_LOG
 
 ####################################################
 # Delete metadata in a Salesforce org.
+# Destructive Apex deployments require tests in Production.
+# Ensure environment name is "prd".
 ####################################################
 .delete-metadata:
   extends: .salesforce-container
   script:
-    - python3 ./scripts/python/delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment $CI_ENVIRONMENT_URL --log $DEPLOY_LOG | tee -a $DEPLOY_LOG
+    - python3 ./scripts/python/delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment "$CI_ENVIRONMENT_NAME"
   after_script:
-    - rm $DEPLOY_LOG
+    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
 
 ####################################################
 # Declare jobs for the sandbox org.

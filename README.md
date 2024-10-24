@@ -16,6 +16,7 @@ The pipeline is divided into the following stages:
     - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the package in the MR description.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
+    - Destructive Apex Deployments in Production must run Apex tests. The script can be updated to run pre-defined tests. Currently, my model looks at the commit message for specific Jira project keys and runs tests by team.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
 The deployment and validation status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:

@@ -313,13 +313,13 @@ def find_apex_tests(file_path: str) -> str:
 
         # Check if @isTest annotation is present, which indicates the file is an Apex test class
         # If found, append the class file name (without the .cls extension)
-        if '@isTest' in apex_file_contents:
+        if '@istest' in apex_file_contents.lower():
             class_name = os.path.splitext(os.path.basename(file_path))[0]
             test_classes.append(class_name)
             return ' '.join(test_classes)
 
         # Search for @Tests or @TestSuites followed by test class list
-        matches = re.findall(r'@(Tests|TestSuites)\s*:\s*([\w\s,]+)', apex_file_contents)
+        matches = re.findall(r'@(tests|testsuites)\s*:\s*([^\r\n]+)', apex_file_contents, re.IGNORECASE)
         if matches:
             for _, test_list in matches:
                 cleaned_tests = re.sub(r'[\s,]+', ' ', test_list.strip())
