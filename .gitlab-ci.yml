@@ -63,7 +63,6 @@ prodBackfill:
     - sf version --verbose --json
     - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
     - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
-    - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
 
 ####################################################
 # Validate metadata in a Salesforce org.
@@ -76,6 +75,7 @@ prodBackfill:
       - .sf/
       - .sfdx/
   script:
+    - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
     - python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --validate --pipeline $CI_PIPELINE_SOURCE
   after_script:
     - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
@@ -87,6 +87,7 @@ prodBackfill:
 .deploy-metadata:
   extends: .salesforce-container
   script:
+    - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
     # full-deploy if deploying non-apex
     # validate and quick-deploy if deploying apex
     - if [ "$testclasses" == "not a test" ];
