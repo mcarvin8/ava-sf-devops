@@ -93,3 +93,17 @@ The bash scripts in `scripts/bash` could work on other CI/CD platforms as long a
   # Update webhook URL here for your slack channel
   SLACK_WEBHOOK: https://hooks.slack.com/services/
 ```
+- Adjust the `--from` and `--to` SHA arguments for sfdx-git-delta based on platform:
+    - In GitLab, the merge request diff base SHA should be used when validating from a MR as the `--from`/`$BEFORE_SHA` arg. In a direct push pipeline (deploy), it should just use the previous SHA for the `--from`/`$BEFORE_SHA` arg.
+``` yml
+.validate-metadata:
+  extends: .salesforce-container
+  variables:
+    # This will work in merge request pipelines and merged results pipelines
+    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+
+.deploy-metadata:
+  extends: .salesforce-container
+  variables:
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+```

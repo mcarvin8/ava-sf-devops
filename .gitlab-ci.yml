@@ -75,8 +75,6 @@ prodBackfill:
   variables:
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
-    # If you are working on a version of GitLab earlier than v16.6, switch to CI_COMMIT_MESSAGE
-    COMMIT_MSG: $CI_MERGE_REQUEST_DESCRIPTION
   cache:
     key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
     paths:
@@ -96,7 +94,6 @@ prodBackfill:
   extends: .salesforce-container
   variables:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
