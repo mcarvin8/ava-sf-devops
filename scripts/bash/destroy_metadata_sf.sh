@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-
 # run destruction only if destructive changes package has types
 if grep -q '<types>' $DESTRUCTIVE_CHANGES_PACKAGE ; then
   echo "---- Destructive metadata changes found.... ----"
