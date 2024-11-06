@@ -78,7 +78,7 @@ prodBackfill:
     - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
-    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
+    - source ./scripts/bash/deploy_slack_status.sh
     - rm $DEPLOY_PACKAGE
 
 ####################################################
@@ -90,7 +90,7 @@ prodBackfill:
     - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
-    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK"
+    - source ./scripts/bash/deploy_slack_status.sh
     - rm $DEPLOY_PACKAGE
 
 ####################################################
@@ -103,7 +103,7 @@ prodBackfill:
   script:
     - python3 ./scripts/python/delete_metadata_sf.py --from_ref $BEFORE_SHA --to_ref $CI_COMMIT_SHA --wait $DEPLOY_TIMEOUT --environment "$CI_ENVIRONMENT_NAME"
   after_script:
-    - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
+    - source ./scripts/bash/deploy_slack_status.sh
 
 ####################################################
 # Declare jobs for the sandbox org.

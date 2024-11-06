@@ -93,21 +93,6 @@ In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the 
 
 Update the `CODEOWNERS` file in this repo to define the owners of your code base. Enforce `CODEOWNERS` approval in merge requests to prevent a merge request from being accepted wtihout code owner approval.
 
-## Other CI/CD Platforms
-
-The Python scripts can be used on other CI/CD platforms as-is. Reference the arguments passed to the Python scripts in the sample `.gitlab-ci.yml`.
-
-The only Python script which requires a modifiction is `deploy_slack_status.py`. The job status string should be updated to match your platform:
-
-``` python
-    # GitLab's CI_JOB_STATUS will be set to "success" for a successful job
-    # Update for other CI environments
-    if status == "success":
-        slack_msg_header = f":heavy_green_checkmark: *{pipeline_description} succeeded*"
-    else:
-        slack_msg_header = f":x: *{pipeline_description} failed*"
-```
-
 ## Bot Deployments
 
 To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
