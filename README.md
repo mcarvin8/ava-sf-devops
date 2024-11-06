@@ -79,7 +79,7 @@ The bash scripts in `scripts/bash` could work on other CI/CD platforms as long a
 - `$CI_ENVIRONMENT_NAME` should be the org name and should be "prd" for production orgs.
     - Used by `scripts/bash/destroy_metadata_sf.sh` to run destructive Apex deployments with tests due to production requirement.
     - Used by `scripts/bash/deploy_slack_status.sh` for slack posts. Validations environments can have prefix "validate-" due to how you may protect CI/CD environments between deployments and validations. For example, you may create the `validate-dev` environment to allow anyone to validate against Dev but create the `dev` environment to allow only maintainers to deploy to Dev.
-- `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running.
+- `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running. `$CI_JOB_STATUS` must be set to "success" for successful pipelines and some other value for failed pipelines.
     - Used by `scripts/bash/deploy_slack_status.sh` if you want to post the job-specific status to a slack channel.
 - `$CI_PROJECT_PATH`, `$CI_SERVER_HOST`, and `$CI_COMMIT_SHORT_SHA` should be set approriately for the CI/CD platform.
     - Used by  `scripts/bash/merge_main_into_sbx.sh` or `scripts/bash/rollback.sh` scripts if you'd like to use them for org branch cleanups and automated rollbacks.
