@@ -15,15 +15,11 @@ ns = {'sforce': 'http://soap.sforce.com/2006/04/metadata'}
 def parse_args():
     """
         Function to pass required arguments.
-        from_ref - previous commit or baseline branch $CI_COMMIT_BEFORE_SHA
-        to_ref - current commit or new branch $CI_COMMIT_SHA
         plugin - package created by the SDFX Git Delta Plugin
         message - commit message that includes package.xml contents
         output - package.xml for deployment
     """
     parser = argparse.ArgumentParser(description='A script to build the deployment package.')
-    parser.add_argument('-f', '--from_ref')
-    parser.add_argument('-t', '--to_ref')
     parser.add_argument('-p', '--plugin', default='package/package.xml')
     parser.add_argument('-m', '--message', default=None)
     parser.add_argument('-o', '--output', default='package.xml')
@@ -75,7 +71,7 @@ def parse_package_file(package_path, changes, ignore_api_version):
     return changes, api_version
 
 
-def create_metadata_dict(from_ref, to_ref, plugin_package, commit_msg, output_file):
+def create_metadata_dict(plugin_package, commit_msg, output_file):
     """
         Create a dictionary with all metadata types.
     """
@@ -118,15 +114,14 @@ def create_package_file(items, api_version, output_file):
         package_file.write(package_contents)
 
 
-def main(from_ref, to_ref, plugin, message, output):
+def main(plugin, message, output):
     """
         Main function to build the deployment package
     """
-    metadata_dict, api_version = create_metadata_dict(from_ref, to_ref, plugin, message, output)
+    metadata_dict, api_version = create_metadata_dict(plugin, message, output)
     create_package_file(metadata_dict, api_version, output)
 
 
 if __name__ == '__main__':
     inputs = parse_args()
-    main(inputs.from_ref, inputs.to_ref,
-         inputs.plugin, inputs.message, inputs.output)
+    main(inputs.plugin, inputs.message, inputs.output)
