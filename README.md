@@ -73,37 +73,23 @@ To rollback a deployment,
 
 ## Other CI/CD Platforms
 
-The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables:
-- `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
-    - Used by `scripts/bash/deploy_metadata_sf.sh`.
-- `$CI_ENVIRONMENT_NAME` should be the org name and should be "prd" for production orgs.
-    - Used by `scripts/bash/destroy_metadata_sf.sh` to run destructive Apex deployments with tests due to production requirement.
-    - Used by `scripts/bash/deploy_slack_status.sh` for slack posts. Validations environments can have prefix "validate-" due to how you may protect CI/CD environments between deployments and validations. For example, you may create the `validate-dev` environment to allow anyone to validate against Dev but create the `dev` environment to allow only maintainers to deploy to Dev.
-- `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running. `$CI_JOB_STATUS` must be set to "success" for successful pipelines and some other value for failed pipelines.
-    - Used by `scripts/bash/deploy_slack_status.sh` if you want to post the job-specific status to a slack channel.
-- `$CI_PROJECT_PATH`, `$CI_SERVER_HOST`, and `$CI_COMMIT_SHORT_SHA` should be set approriately for the CI/CD platform.
-    - Used by  `scripts/bash/merge_main_into_sbx.sh` or `scripts/bash/rollback.sh` scripts if you'd like to use them for org branch cleanups and automated rollbacks.
-- Set the other variables required by the scripts as defined in the top of the `.gitlab-ci.yml`:
-``` yml
-  DEPLOY_TIMEOUT: 240
-  DEPLOY_PACKAGE: package.xml
-  DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
-  DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
-  DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
-  # Update webhook URL here for your slack channel
-  SLACK_WEBHOOK: https://hooks.slack.com/services/
-```
-- Adjust the `--from` and `--to` SHA arguments for sfdx-git-delta based on platform:
-    - In GitLab, the merge request diff base SHA should be used when validating from a MR as the `--from`/`$BEFORE_SHA` arg. In a direct push pipeline (deploy), it should just use the previous SHA for the `--from`/`$BEFORE_SHA` arg.
-``` yml
-.validate-metadata:
-  extends: .salesforce-container
-  variables:
-    # This will work in merge request pipelines and merged results pipelines
-    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables.
 
-.deploy-metadata:
-  extends: .salesforce-container
-  variables:
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
-```
+The primary scripts to destroy, deploy, and validate metadata are:
+- `scripts/bash/deploy_metadata_sf.sh` - To validate and deploy metadata to Salesforce orgs. Tests are set by `scripts/bash/package_check.sh`.
+    - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
+    - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
+    - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.
+`scripts/bash/package_check.sh` - To check the package before validating and deploying metadata to Salesforce orgs.
+    - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
+- `scripts/bash/destroy_metadata_sf.sh`
+    - `$DESTRUCTIVE_CHANGES_PACKAGE` should be the path to the `destructive/destructiveChanges.xml` created by the sfdx-git-delta plugin. `$DESTRUCTIVE_PACKAGE` should be the path to the `destructive/package.xml` created by the sfdx-git-delta plugin.
+    - `$CI_ENVIRONMENT_NAME` must be "prd" for production orgs in order to run apex tests when destroying Apex in production, per Salesforce requirement. Sandbox org names do not matter.
+    - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.   
+
+The optional scripts that you can include are:
+- `scripts/bash/merge_main_into_sbx.sh` - Merge `main` branch backwards into other org branches when using the org branching strategy (create branches from `main` but merge into all org branches)
+- `scripts/bash/deploy_slack_status.sh` - Posts pipeline status to slack channel.
+    - `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running. `$CI_JOB_STATUS` must be set to "success" for successful pipelines and some other value for failed pipelines.
+    - `$CI_ENVIRONMENT_NAME` should be the org name and should be "prd" for production orgs.
+
