@@ -83,13 +83,7 @@ prodBackfill:
       - .sf/
       - .sfdx/
   script:
-    - apex=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
-    - if [ "$apex" == "True" ]; then
-        echo y | sf plugins install apextestlist@latest;
-        testclasses=$(sf apextests list -x "$DEPLOY_PACKAGE");
-      else
-        testclasses="not a test";
-      fi
+    - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh
@@ -105,12 +99,7 @@ prodBackfill:
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
     - apex=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
-    - if [ "$apex" == "True" ]; then
-        echo y | sf plugins install apextestlist@latest;
-        testclasses=$(sf apextests list -x "$DEPLOY_PACKAGE");
-      else
-        testclasses="not a test";
-      fi
+    - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh
