@@ -74,11 +74,7 @@ If you do not want to use this feature, remove the `replacements` key in the `sf
 
 ## Connected Apps
 
-The package parsing script will look for `ConnectedApp` in the package.xml and process each connected app in the package.
-
-The script will automatically remove the `<consumerKey>` line in every connected app file as consumer keys are unique in each org and will fail a deployment if left in the file.
-
-When ran in the pipeline, the changes will be discarded when the pipeline completes, so you will have consumer keys staged in your repo if you dont remove them yourself after retrieval.
+The `scripts/bash/adjust_connected_apps.sh` can be added to this pipeline to automatically remove the `<consumerKey>` line in each connected app meta file before you deploy them to an org using the CLI. Deployments with connected apps will fail if you leave the consumer key in the file.
 
 ## Roll-Back Pipeline
 
