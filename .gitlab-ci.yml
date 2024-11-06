@@ -62,7 +62,7 @@ prodBackfill:
     - echo y | sf plugins:install sfdx-git-delta@latest
     - sf version --verbose --json
     - python3 ./scripts/python/create_deploy_package.py -f $BEFORE_SHA -t $CI_COMMIT_SHA -o $DEPLOY_PACKAGE -m "$COMMIT_MSG"
-    - python3 ./scripts/python/authenticate_sf.py --alias $AUTH_ALIAS --url $AUTH_URL
+    - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
 
 ####################################################
 # Validate metadata in a Salesforce org.
@@ -76,7 +76,7 @@ prodBackfill:
       - .sfdx/
   script:
     - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
-    - python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --validate --pipeline $CI_PIPELINE_SOURCE
+    - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK" --stage "$CI_JOB_STAGE"
     - rm $DEPLOY_PACKAGE
@@ -88,12 +88,7 @@ prodBackfill:
   extends: .salesforce-container
   script:
     - testclasses=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
-    # full-deploy if deploying non-apex
-    # validate and quick-deploy if deploying apex
-    - if [ "$testclasses" == "not a test" ];
-      then python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT;
-      else python3 ./scripts/python/deploy_metadata_sf.py --tests "$testclasses" --manifest $DEPLOY_PACKAGE --wait $DEPLOY_TIMEOUT --validate;
-      fi
+    - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - python3 ./scripts/python/deploy_slack_status.py --status "$CI_JOB_STATUS" --user "$GITLAB_USER_NAME" --job "$CI_JOB_URL" --project "$CI_PROJECT_URL" --commit "$CI_COMMIT_SHA" --environment "$CI_ENVIRONMENT_NAME" --webhook "$SLACK_WEBHOOK"
     - rm $DEPLOY_PACKAGE

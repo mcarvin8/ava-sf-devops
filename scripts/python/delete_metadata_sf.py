@@ -7,7 +7,6 @@ import threading
 import xml.etree.ElementTree as ET
 
 
-import deploy_metadata_sf
 import package_check
 
 
@@ -181,7 +180,7 @@ def main(from_ref, to_ref, wait, environment, output, debug):
     if debug:
         return
 
-    deploy_metadata_sf.run_command(command)
+    run_command(command)
 
 
 if __name__ == '__main__':
