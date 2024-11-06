@@ -22,3 +22,4 @@ if [ "$apex" == "True" ] && ["$CI_ENVIRONMENT_NAME" == "prd"]; then
     sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -l RunSpecifiedTests -t $DESTRUCTIVE_TESTS -w $DEPLOY_TIMEOUT --verbose 
 else
     sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -w $DEPLOY_TIMEOUT --verbose
+fi
