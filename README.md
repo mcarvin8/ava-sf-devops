@@ -18,7 +18,7 @@ The pipeline is divided into the following stages:
     - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the package in the MR description.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
-    - To destroy Apex in production, you must run tests. In `scripts/bash/destroy_metadata_sf.sh`, pre-defined tests are hard-coded based on team keys. You should update this to run the pre-defined tests based on the commit message.
+    - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
 The deployment, validation, and destruction status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
@@ -76,7 +76,20 @@ To rollback a deployment,
 The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables:
 - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
     - Used by `scripts/bash/deploy_metadata_sf.sh`.
+- `$CI_ENVIRONMENT_NAME` should be the org name and should be "prd" for production orgs.
+    - Used by `scripts/bash/destroy_metadata_sf.sh` to run destructive Apex deployments with tests due to production requirement.
+    - Used by `scripts/bash/deploy_slack_status.sh` for slack posts. Validations environments can have prefix "validate-" due to how you may protect CI/CD environments between deployments and validations. For example, you may create the `validate-dev` environment to allow anyone to validate against Dev but create the `dev` environment to allow only maintainers to deploy to Dev.
 - `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running.
     - Used by `scripts/bash/deploy_slack_status.sh` if you want to post the job-specific status to a slack channel.
 - `$CI_PROJECT_PATH`, `$CI_SERVER_HOST`, and `$CI_COMMIT_SHORT_SHA` should be set approriately for the CI/CD platform.
     - Used by  `scripts/bash/merge_main_into_sbx.sh` or `scripts/bash/rollback.sh` scripts if you'd like to use them for org branch cleanups and automated rollbacks.
+- Set the other variables required by the scripts as defined in the top of the `.gitlab-ci.yml`:
+``` yml
+  DEPLOY_TIMEOUT: 240
+  DEPLOY_PACKAGE: package.xml
+  DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
+  DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
+  DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
+  # Update webhook URL here for your slack channel
+  SLACK_WEBHOOK: https://hooks.slack.com/services/
+```

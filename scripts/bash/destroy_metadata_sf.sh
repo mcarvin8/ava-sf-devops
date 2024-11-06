@@ -1,42 +1,25 @@
 #!/bin/bash
 set -e
 
-determine_tests() {
-    # Define the project keys and their associated test classes
-    declare -A project_keys
-    project_keys=(
-        ["BATS"]="ProjectTriggerHandlerTest ProjectTaskTriggerHandlerTest ProjectTaskDependencyTiggerHandlerTest"
-        ["LEADZ"]="AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
-        ["PLAUNCH"]="PaymentMethodTriggerHandlerTest"
-        ["SFQ2C"]="PaymentMethodTriggerHandlerTest"
-        ["SHIELD"]="ScEMEARegistrationHandlerTest SupportCaseCommunity1Test"
-        ["STORM"]="EmailMessageTriggerHandlerTest CaseTriggerHandlerTest"
-    )
 
-    # Variable to store the selected test classes
-    test_classes=()
+# run destruction only if destructive changes package has types
+if grep -q '<types>' $DESTRUCTIVE_CHANGES_PACKAGE ; then
+  echo "---- Destructive metadata changes found.... ----"
+else
+  echo "---- No changes to destroy ----"
+  exit 0
+fi
 
-    # Iterate over the project keys and check if they are present in the commit message
-    for key in "${!project_keys[@]}"; do
-        if echo "$CI_COMMIT_MESSAGE" | grep -iq "\\b$key\\b"; then
-            # Add all test classes for this project key to the test_classes array
-            test_classes+=(${project_keys[$key]})
-        fi
-    done
+# Check for Apex in the destructive package
+if grep -iq "<name>ApexClass</name>" "$DESTRUCTIVE_CHANGES_PACKAGE" || grep -iq "<name>ApexTrigger</name>" "$DESTRUCTIVE_CHANGES_PACKAGE"; then
+    apex="True"
+else
+    apex="False"
+fi
 
-    # Add default tests if no team match is found
-    if [ ${#test_classes[@]} -eq 0 ]; then
-        test_classes=("AccountTriggerHandlerTest" "CaseTriggerHandlerTest")
-    fi
-
-    # Print test classes as a space-separated list
-    echo "${test_classes[@]}"
-}
-
-# Set specified tests if destroying apex in production
-if [ "$testclasses" == "not a test" ]
-    testclasses=$(determine_tests)
-    echo "Tests to run: $required_tests"
-    sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -l RunSpecifiedTests -t $testclasses -w $DEPLOY_TIMEOUT --verbose 
+# Run destructive deployment with pre-defined tests if destroying apex in production (prd)
+# Otherwise, destroy without running tests
+if [ "$apex" == "True" ] && ["$CI_ENVIRONMENT_NAME" == "prd"]; then
+    sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -l RunSpecifiedTests -t $DESTRUCTIVE_TESTS -w $DEPLOY_TIMEOUT --verbose 
 else
     sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -w $DEPLOY_TIMEOUT --verbose
