@@ -11,7 +11,8 @@ if [ "$testclasses" == "not a test" ]; then
         sf project deploy start -x $DEPLOY_PACKAGE -w $DEPLOY_TIMEOUT --verbose
     fi
 else
-    sf project deploy validate -l RunSpecifiedTests -t $testclasses \
+    # apex tests list plugin supplies the "-t" flag
+    sf project deploy validate -l RunSpecifiedTests $testclasses \
         --coverage-formatters json --results-dir coverage \
         -x $DEPLOY_PACKAGE -w $DEPLOY_TIMEOUT --verbose
 fi

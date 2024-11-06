@@ -1,7 +1,9 @@
 # Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
-This repository demonstrates how to use GitLab actions, the Salesforce CLI, the SFDX git delta plugin, and custom Python scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. 
+This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. Each Salesforce org has its own long-running Git branch.
 
-Each Salesforce org has its own long-running Git branch.
+This model uses the following 2 Salesforce CLI plugins:
+1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
+2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
 
 ## CI/CD Jobs
 
@@ -16,10 +18,10 @@ The pipeline is divided into the following stages:
     - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the package in the MR description.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
-    - Destructive Apex Deployments in Production must run Apex tests. The script can be updated to run pre-defined tests. Currently, my model looks at the commit message for specific Jira project keys and runs tests by team.
+    - To destroy Apex in production, you must run tests. In `scripts/bash/destroy_metadata_sf.sh`, pre-defined tests are hard-coded based on team keys. You should update this to run the pre-defined tests based on the commit message.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
-The deployment and validation status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
+The deployment, validation, and destruction status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
 
 ``` yaml
   # Update webhook URL here for your slack channel
@@ -48,40 +50,11 @@ The final deployment package cannot contain wildcard characters for delta deploy
 
 ## Declare Apex Tests
 
-To declare specified Apex tests to run when deploying Apex, you must add test annotations to each Apex class file (`*.cls`) and Apex trigger file (`*.trigger`) following the below regular expressions:
+If Apex classes/trigger are found in the package for validations or deployments, it will install and run the apex tests list plugin to determine the specified tests to run, instead of running all local tests in the org.
 
-- Using `@Test:` regular expression on a single line (multiple tests can be separated by commas or spaces)
-```
-/**
- * @description       : Class used when running sandbox refreshes
- * @author            : Matt Carvin
- * @Tests: PrepareMySandboxTest TestB
-**/
-```
+You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [Apex Test List plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
 
-- Using `@TestSuites:` regular expression on a single line (multiple tests can be separated by commas or spaces)
-
-```
-/**
- * @description       : Class used when running sandbox refreshes
- * @author            : Matt Carvin
- * @TestSuites: PrepareMySandboxTest TestB
-**/
-```
-
-- Using either regular expression over multiple lines for multiple tests:
-```
-/**
- * @description       : Class used when running sandbox refreshes
- * @author            : Matt Carvin
- * @TestSuites: PrepareMySandboxTest
- * @TestSuites: TestB
-**/
-```
-
-The Apex classes and triggers will only be scanned for test annotations if the package.xml contains apex classes or triggers.
-
-If an Apex Test class is in your package.xml, the script will automatically append the test class name to the run tests string instead of searching for annotations. Annotations are only needed in the main Apex Classes and Apex Triggers.
+This plugin is not used in destructive deployments.
 
 ## Branch Protection
 
