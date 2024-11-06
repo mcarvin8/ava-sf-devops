@@ -9,7 +9,7 @@
 config/*
 package.json
 sfdx-project.json
-*.py
+scripts/**/*
 
 # In this example, Bot Owners should review all updates to the Bot files
 # and the `.forceignore` if you define bot versions to ignore in the file
