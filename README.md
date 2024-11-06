@@ -30,31 +30,21 @@ The deployment, validation, and destruction status is posted to a Slack channel.
 
 ## Declare Metadata to Deploy
 
-This org model uses a manifest file (package.xml) to run delta deployments. By default, the SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
+This org model uses a manifest file (package.xml) to run delta deployments. The SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
 
-As a backup, the GitLab Merge Request description will be parsed via the merge commit message to look for package.xml contents.
+This package is then checked to search for Apex Classes, Apex Triggers, and Connected Apps. See below:
 
-The package.xml contents in the Merge Request should be used to declare any metadata that would not be covered by the diff between the current commit and the previous commit.
-
-The following updates must be made to your GitLab repository:
-- The default merge commit message should be updated to include the description of the MR for UI merges.
-![Merge Request Commit Message Template](.gitlab/images/mr-commit-message-template.JPG)
-- The default merge request description template should be updated to include the package.xml header and footer.
-![Default Merge Request Description](.gitlab/images/default-mr-description.JPG)
-- Enable Merged Results Pipelines 
-![Merged Results Setting](.gitlab/images/merged-results.png)
-
-The plugin manifest file and the manual manifest file will be merged to create the final deployment package.
-
-The final deployment package cannot contain wildcard characters for delta deployments. If a metadata type contains a wildcard, it will not be added to the final deployment package.
-
-## Declare Apex Tests
+### Declare Apex Tests
 
 If Apex classes/trigger are found in the package for validations or deployments, it will install and run the apex tests list plugin to determine the specified tests to run, instead of running all local tests in the org.
 
 You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [Apex Test List plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
 
 This plugin is not used in destructive deployments.
+
+### Connected Apps
+
+If connected apps are found in the package for validations or deployments, the `<consumerKey>` line in each connected app meta file will be automatically removed before deployment. Deployments with connected apps will fail if you leave the consumer key in the file.
 
 ## Branch Protection
 
@@ -67,10 +57,6 @@ In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the 
 To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
 
 If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
-
-## Connected Apps
-
-The `scripts/bash/adjust_connected_apps.sh` can be added to this pipeline to automatically remove the `<consumerKey>` line in each connected app meta file before you deploy them to an org using the CLI. Deployments with connected apps will fail if you leave the consumer key in the file.
 
 ## Roll-Back Pipeline
 

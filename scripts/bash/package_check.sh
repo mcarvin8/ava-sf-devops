@@ -11,3 +11,14 @@ else
     echo "ApexClass or ApexTrigger not found in $DEPLOY_PACKAGE"
     testclasses="not a test"
 fi
+
+# Check if Connected App is in the package and remove consumer keys if true
+if grep -iq "<name>ConnectedApp</name>" "$DEPLOY_PACKAGE"; then
+    echo "Found ConnectedApp in $DEPLOY_PACKAGE, removing consumer keys in each connected app before deployment..."
+    # Remove the <consumerKey> line in every connected app file in the current directory and its subdirectories
+    find . -type f -name "*.connectedApp-meta.xml" | while read -r file; do
+        echo "Processing Connected App file: $file"
+        sed -i '/<consumerKey>/d' "$file"
+    done
+    echo "Completed removing <consumerKey> lines from Connected App files."
+fi
