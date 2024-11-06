@@ -23,7 +23,7 @@
       "replaceWithFile": "scripts/replacementFiles/fqaBotUser.txt",
       "replaceWhenEnv": [{
         "env": "AUTH_ALIAS",
-        "value": "FULLQA"
+        "value": "FQA"
       }] 
     },
     {
@@ -32,7 +32,7 @@
       "replaceWithFile": "scripts/replacementFiles/prdBotUser.txt",
       "replaceWhenEnv": [{
         "env": "AUTH_ALIAS",
-        "value": "PRODUCTION"
+        "value": "PRD"
       }] 
     }
   ]
