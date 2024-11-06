@@ -9,10 +9,8 @@ This model uses the following 2 Salesforce CLI plugins:
 
 The pipeline is divided into the following stages:
 
-- The `backfill` stage pushes commits from `main` branch backwards to `fqa` and `dev` branches. This is required for branching strategies where developers create branches from `main`, but have to merge their branches into other long running branches (`dev` and `fqa` in this template).
-    - This job requires a project access token configured for the GitLab repository - https://docs.gitlab.com/ee/user/project/settings/project_access_tokens.html
-    - Add 3 CI/CD variables to the repo called `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN`. The `BOT_NAME` should be the name of the project access token/bot account. The `BOT_USER_NAME` will be the user name for the bot account created when making the project access token (ex: `project_{project_id}_bot_{random_string}`). The `PROJECT_TOKEN` will be the passphrase generated after making the token.
-    - The Docker image requires a version of Git which can skip pipelines during a push (`git push -o ci.skip`).
+
+### Primary Stages
 - The `validate` stage contains jobs for each org. When a merge request is opened against one of the org branches, it will validate the changes in the org.
     - This has been confirmed on GitLab Merge Request Pipelines (standard pipeline - defaults to this when there are merge conflicts) and Merged Results Pipelines (when there are no conflicts and this setting is enabled in the repo)
     - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the package in the MR description.
@@ -21,12 +19,30 @@ The pipeline is divided into the following stages:
     - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
-The deployment, validation, and destruction status is posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
+The deployment, validation, and destruction status can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
 
 ``` yaml
   # Update webhook URL here for your slack channel
   SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 ```
+
+Delete this variable and the step in each `after_script` section if you are not using slack.
+
+### Secondary Stages
+**These jobs and the stage are optional and should be deleted if you have no use for them.**
+
+- The `backfill` job in the `pipeline` stage pushes commits from `main` branch backwards to `fqa` and `dev` branches. This is required for branching strategies where developers create branches from `main`, but have to merge their branches into other long running branches (`dev` and `fqa` in this template).
+    - This job requires a project access token configured for the GitLab repository - https://docs.gitlab.com/ee/user/project/settings/project_access_tokens.html
+    - Add 3 CI/CD variables to the repo called `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN`. The `BOT_NAME` should be the name of the project access token/bot account. The `BOT_USER_NAME` will be the user name for the bot account created when making the project access token (ex: `project_{project_id}_bot_{random_string}`). The `PROJECT_TOKEN` will be the passphrase generated after making the token.
+    - The Docker image requires a version of Git which can skip pipelines during a push (`git push -o ci.skip`).
+- The `rollback` job in the `pipeline` stage is an automated rollback pipeline that uses the "web" pipeline source.
+    - To rollback a deployment:
+        1. Identify the commit SHA which triggered the original deployment.
+        2. Go to CI/CD --> Pipelines in your GitLab repo.
+        3. Click the "Run pipeline" button to create a web-based pipeline.
+        4. Select the applicable org branch to run against.
+        5. Provide the variable key `SHA` and set its value to the commit SHA (short or full hash).
+        6. Press "Run pipeline" and confirm pipeline completes. This will use the `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN` from the project access token created for the `backfill` job.
 
 ## Declare Metadata to Deploy
 
@@ -60,16 +76,7 @@ If you do not want to use this feature, remove the `replacements` key in the `sf
 
 ## Roll-Back Pipeline
 
-An automated rollback pipeline has been configured using the web-based pipeline source.
 
-To rollback a deployment, 
-
-1. Identify the commit SHA which triggered the original deployment.
-2. Go to CI/CD --> Pipelines in your GitLab repo.
-3. Click the "Run pipeline" button to create a web-based pipeline.
-4. Select the applicable org branch to run against.
-5. Provide the variable key `SHA` and set its value to the commit SHA (short or full hash).
-6. Press "Run pipeline" and confirm pipeline completes. This will use the `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN` from the project access token created for the `backfill` job.
 
 ## Other CI/CD Platforms
 
