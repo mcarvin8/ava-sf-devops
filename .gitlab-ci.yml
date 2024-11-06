@@ -72,6 +72,11 @@ prodBackfill:
 ####################################################
 .validate-metadata:
   extends: .salesforce-container
+  variables:
+    # This will work in merge request pipelines and merged results pipelines
+    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+    # If you are working on a version of GitLab earlier than v16.6, switch to CI_COMMIT_MESSAGE
+    COMMIT_MSG: $CI_MERGE_REQUEST_DESCRIPTION
   cache:
     key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
     paths:
@@ -95,6 +100,9 @@ prodBackfill:
 ####################################################
 .deploy-metadata:
   extends: .salesforce-container
+  variables:
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+    COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
     - apex=$(python3 ./scripts/python/package_check.py --manifest $DEPLOY_PACKAGE)
     - if [ "$apex" == "True" ]; then
@@ -136,10 +144,6 @@ validate:dev:
   variables:
     AUTH_ALIAS: SANDBOX
     AUTH_URL: $SANDBOX_AUTH_URL
-    # This will work in merge request pipelines and merged results pipelines
-    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
-    # If you are working on GitLab v16.6, switch to CI_MERGE_REQUEST_DESCRIPTION
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: validate-sandbox
     url: https://avalara--dev.sandbox.my.salesforce.com
@@ -161,8 +165,6 @@ deploy:dev:
   variables:
     AUTH_ALIAS: SANDBOX
     AUTH_URL: $SANDBOX_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: sandbox
     url: https://avalara--dev.sandbox.my.salesforce.com
@@ -184,7 +186,6 @@ destroy:dev:
   variables:
     AUTH_ALIAS: SANDBOX
     AUTH_URL: $SANDBOX_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
     name: sandbox
     url: https://avalara--dev.sandbox.my.salesforce.com
@@ -207,10 +208,6 @@ validate:fqa:
   variables:
     AUTH_ALIAS: FQA
     AUTH_URL: $FQA_AUTH_URL
-    # This will work in merge request pipelines and merged results pipelines
-    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
-    # If you are working on GitLab v16.6, switch to CI_MERGE_REQUEST_DESCRIPTION
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: validate-fqa
     url: https://avalara--fqa.sandbox.my.salesforce.com
@@ -232,8 +229,6 @@ deploy:fqa:
   variables:
     AUTH_ALIAS: FQA
     AUTH_URL: $FQA_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: fqa
     url: https://avalara--fqa.sandbox.my.salesforce.com
@@ -255,7 +250,6 @@ destroy:fqa:
   variables:
     AUTH_ALIAS: FQA
     AUTH_URL: $FQA_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
     name: fqa
     url: https://avalara--fqa.sandbox.my.salesforce.com
@@ -278,10 +272,6 @@ validate:prd:
   variables:
     AUTH_ALIAS: PRD
     AUTH_URL: $PRD_AUTH_URL
-    # This will work in merge request pipelines and merged results pipelines
-    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
-    # If you are working on GitLab v16.6, switch to CI_MERGE_REQUEST_DESCRIPTION
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: validate-prod
     url: https://avalara.my.salesforce.com
@@ -303,8 +293,6 @@ deploy:prd:
   variables:
     AUTH_ALIAS: PRD
     AUTH_URL: $PRD_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
-    COMMIT_MSG: $CI_COMMIT_MESSAGE
   environment:
     name: prd
     url: https://avalara.my.salesforce.com
@@ -326,7 +314,6 @@ destroy:prd:
   variables:
     AUTH_ALIAS: PRD
     AUTH_URL: $PRD_AUTH_URL
-    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   environment:
     name: prd
     url: https://avalara.my.salesforce.com
