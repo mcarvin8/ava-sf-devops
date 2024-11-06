@@ -4,8 +4,6 @@
 import argparse
 import logging
 import re
-import subprocess
-import sys
 import xml.etree.ElementTree as ET
 
 
@@ -77,35 +75,16 @@ def parse_package_file(package_path, changes, ignore_api_version):
     return changes, api_version
 
 
-def run_command(cmd):
-    """
-        Function to run the command using the native shell.
-    """
-    try:
-        subprocess.run(cmd, check=True, shell=True)
-        return True
-    except subprocess.CalledProcessError:
-        logging.info('WARNING: The plugin was unable to build the package.xml from the git diff.')
-        return False
-
-
 def create_metadata_dict(from_ref, to_ref, plugin_package, commit_msg, output_file):
     """
         Create a dictionary with all metadata types.
     """
-    sgd_package = run_command(f'sf sgd:source:delta --to "{to_ref}"'
-                f' --from "{from_ref}" --output "."')
     metadata = {}
-    if sgd_package:
-        metadata, api_version = parse_package_file(plugin_package, metadata, True)
+    metadata, api_version = parse_package_file(plugin_package, metadata, True)
 
     mr_package = build_package_from_commit(commit_msg, output_file)
     if mr_package:
         metadata, api_version = parse_package_file(mr_package, metadata, False)
-    if not sgd_package and not mr_package:
-        logging.info('ERROR: The package.xml was unable to be created via the plugin or the commit message.')
-        logging.info('A) Confirm the commit changed metadata in the `force-app` directory. /OR/ B) Confirm the commit message contains package.xml contents.')
-        sys.exit(1)
     return metadata, api_version
 
 
