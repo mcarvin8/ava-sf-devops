@@ -76,7 +76,7 @@ To rollback a deployment,
 The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables:
 - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
     - Used by `scripts/bash/deploy_metadata_sf.sh`.
-- `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation you would like to run.
-    - Used by `scripts/bash/deploy_slack_status.sh` if you want to post pipeline status to slack.
+- `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running.
+    - Used by `scripts/bash/deploy_slack_status.sh` if you want to post the job-specific status to a slack channel.
 - `$CI_PROJECT_PATH`, `$CI_SERVER_HOST`, and `$CI_COMMIT_SHORT_SHA` should be set approriately for the CI/CD platform.
     - Used by  `scripts/bash/merge_main_into_sbx.sh` or `scripts/bash/rollback.sh` scripts if you'd like to use them for org branch cleanups and automated rollbacks.
