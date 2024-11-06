@@ -68,7 +68,7 @@ SLACK
 # Function to share Slack update using the webhook URL
 function share_slack_update_build() {
     local slack_webhook
-    slack_webhook="$SLACK_WEBHOOK_URL"
+    slack_webhook="$SLACK_WEBHOOK"
     curl -X POST \
         --data-urlencode "payload=$(print_slack_summary_build)" \
         "${slack_webhook}"
