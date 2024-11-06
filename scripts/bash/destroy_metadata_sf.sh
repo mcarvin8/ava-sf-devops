@@ -6,7 +6,7 @@ if grep -q '<types>' $DESTRUCTIVE_CHANGES_PACKAGE ; then
   echo "---- Destructive metadata changes found.... ----"
 else
   echo "---- No changes to destroy ----"
-  exit 0
+  exit 1
 fi
 
 # Check for Apex in the destructive package
