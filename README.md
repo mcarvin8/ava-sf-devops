@@ -74,10 +74,6 @@ To deploy Einstein Bots, you should update the `.forceignore` file with bot vers
 
 If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
 
-## Roll-Back Pipeline
-
-
-
 ## Other CI/CD Platforms
 
 The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables.
@@ -93,5 +89,11 @@ The primary scripts to destroy, deploy, and validate metadata are:
     - `$DESTRUCTIVE_CHANGES_PACKAGE` should be the path to the `destructive/destructiveChanges.xml` created by the sfdx-git-delta plugin. `$DESTRUCTIVE_PACKAGE` should be the path to the `destructive/package.xml` created by the sfdx-git-delta plugin.
     - `$CI_ENVIRONMENT_NAME` must be "prd" for production orgs in order to run apex tests when destroying Apex in production, per Salesforce requirement. Sandbox org names do not matter.
     - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.   
+- `scripts/bash/deploy_slack_status.sh`
+    - `$CI_ENVIRONMENT_NAME` must be set with the org name. Optionally, validation environments can start with "validate-", which will be removed in the slack status. This is useful to create separate CI/CD environments for validations and deployments to limit those who can deploy over those who can validate.
+    - `$CI_JOB_STAGE` must be "validate", "destroy", or "deploy" to have slack post the right message.
+    - `$CI_JOB_STATUS` must be "success" for successful pipelines and some other value for failed pipelines.
+    - `GITLAB_USER_NAME`, `CI_JOB_URL`, `CI_PROJECT_URL`, `CI_COMMIT_SHA` should be adjusted for the platform to have the correct details.
+
 
 Adjustments for the `scripts/bash/merge_main_into_sbx.sh` (merge main branch backwards into other org branches when using the org branching strategy) and `scripts/bash/rollback.sh` (rollback previous deployments) will have to be made based on the platform as well.
