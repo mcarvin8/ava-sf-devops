@@ -52,7 +52,7 @@ This package is then checked to search for Apex Classes, Apex Triggers, and Conn
 
 ### Declare Apex Tests
 
-If Apex classes/trigger are found in the package for validations or deployments, it will install and run the apex tests list plugin to determine the specified tests to run, instead of running all local tests in the org.
+If Apex classes/trigger are found in the package for validations or deployments, it will run the apex tests list plugin to determine the specified tests to run, instead of running all local tests in the org.
 
 You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [Apex Test List plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
 
