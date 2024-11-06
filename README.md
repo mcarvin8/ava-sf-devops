@@ -87,9 +87,4 @@ The primary scripts to destroy, deploy, and validate metadata are:
     - `$CI_ENVIRONMENT_NAME` must be "prd" for production orgs in order to run apex tests when destroying Apex in production, per Salesforce requirement. Sandbox org names do not matter.
     - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.   
 
-The optional scripts that you can include are:
-- `scripts/bash/merge_main_into_sbx.sh` - Merge `main` branch backwards into other org branches when using the org branching strategy (create branches from `main` but merge into all org branches)
-- `scripts/bash/deploy_slack_status.sh` - Posts pipeline status to slack channel.
-    - `$CI_JOB_STAGE` must be either "destroy", "validate", or "deploy" based on what operation is running. `$CI_JOB_STATUS` must be set to "success" for successful pipelines and some other value for failed pipelines.
-    - `$CI_ENVIRONMENT_NAME` should be the org name and should be "prd" for production orgs.
-
+Adjustments for the `scripts/bash/merge_main_into_sbx.sh` (merge main branch backwards into other org branches when using the org branching strategy) and `scripts/bash/rollback.sh` (rollback previous deployments) will have to be made based on the platform as well.
