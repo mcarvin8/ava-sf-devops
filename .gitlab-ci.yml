@@ -11,7 +11,7 @@ stages:
 
 variables:
   DEPLOY_TIMEOUT: 240
-  DEPLOY_PACKAGE: package.xml
+  DEPLOY_PACKAGE: "package/package.xml"
   DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
   DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
   DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
