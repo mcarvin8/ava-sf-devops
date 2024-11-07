@@ -1,25 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-# Function to print the Slack summary message
 function print_slack_summary_build() {
     local slack_msg_header
     local pipeline_description
+    local environment_name="${CI_ENVIRONMENT_NAME}"
 
     if [[ "${CI_JOB_STAGE}" == "validate" ]]; then
         # remove "validate-" in environment name
-        CI_ENVIRONMENT_NAME="${CI_ENVIRONMENT_NAME/validate-/}"
-        pipeline_description="Validation against ${CI_ENVIRONMENT_NAME}"
+        environment_name="${environment_name/validate-/}"
+        pipeline_description="Validation against ${environment_name}"
     elif [[ "${CI_JOB_STAGE}" == "destroy" ]]; then
-        pipeline_description="Destructive Deployment to ${CI_ENVIRONMENT_NAME}"
+        pipeline_description="Destructive Deployment to ${environment_name}"
     else
-        pipeline_description="Deployment to ${CI_ENVIRONMENT_NAME}"
+        pipeline_description="Deployment to ${environment_name}"
     fi
 
     if [[ "${CI_JOB_STATUS}" == "success" ]]; then
-        slack_msg_header=":orange-check: *${pipeline_description} succeeded* :orange-check:"
+        slack_msg_header=":orange-check: ${pipeline_description} succeeded :orange-check:"
     else
-        slack_msg_header=":alert: *${pipeline_description} failed* :alert:"
+        slack_msg_header=":alert: ${pipeline_description} failed :alert:"
     fi
 
     cat <<-SLACK
@@ -41,7 +41,7 @@ function print_slack_summary_build() {
                 "fields": [
                     {
                         "type": "mrkdwn",
-                        "text": "*Environment:*\n${CI_ENVIRONMENT_NAME}"
+                        "text": "*Environment:*\n${environment_name}"
                     },
                     {
                         "type": "mrkdwn",
@@ -65,7 +65,6 @@ function print_slack_summary_build() {
 SLACK
 }
 
-# Function to share Slack update using the webhook URL
 function share_slack_update_build() {
     local slack_webhook
     slack_webhook="$SLACK_WEBHOOK"
