@@ -9,8 +9,6 @@ This model uses the following 2 Salesforce CLI plugins:
 
 The pipeline is divided into the following stages:
 
-
-### Primary Stages
 - The `validate` stage contains jobs for each org. When a merge request is opened against one of the org branches, it will validate the changes in the org.
     - This has been confirmed on GitLab Merge Request Pipelines (standard pipeline - defaults to this when there are merge conflicts) and Merged Results Pipelines (when there are no conflicts and this setting is enabled in the repo)
     - If you are working on GitLab v16.6, adjust the variable $COMMIT_MSG to use $CI_MERGE_REQUEST_DESCRIPTION to ensure MR pipelines with merge conflicts parse the package in the MR description.
@@ -27,22 +25,6 @@ The deployment, validation, and destruction status can be posted to a Slack chan
 ```
 
 Delete this variable and the step in each `after_script` section if you are not using slack.
-
-### Secondary Stages
-**These jobs and the stage are optional and should be deleted if you have no use for them.**
-
-- The `backfill` job in the `pipeline` stage pushes commits from `main` branch backwards to `fqa` and `dev` branches. This is required for branching strategies where developers create branches from `main`, but have to merge their branches into other long running branches (`dev` and `fqa` in this template).
-    - This job requires a project access token configured for the GitLab repository - https://docs.gitlab.com/ee/user/project/settings/project_access_tokens.html
-    - Add 3 CI/CD variables to the repo called `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN`. The `BOT_NAME` should be the name of the project access token/bot account. The `BOT_USER_NAME` will be the user name for the bot account created when making the project access token (ex: `project_{project_id}_bot_{random_string}`). The `PROJECT_TOKEN` will be the passphrase generated after making the token.
-    - The Docker image requires a version of Git which can skip pipelines during a push (`git push -o ci.skip`).
-- The `rollback` job in the `pipeline` stage is an automated rollback pipeline that uses the "web" pipeline source.
-    - To rollback a deployment:
-        1. Identify the commit SHA which triggered the original deployment.
-        2. Go to CI/CD --> Pipelines in your GitLab repo.
-        3. Click the "Run pipeline" button to create a web-based pipeline.
-        4. Select the applicable org branch to run against.
-        5. Provide the variable key `SHA` and set its value to the commit SHA (short or full hash).
-        6. Press "Run pipeline" and confirm pipeline completes. This will use the `BOT_NAME`, `BOT_USER_NAME` and `PROJECT_TOKEN` from the project access token created for the `backfill` job.
 
 ## Declare Metadata to Deploy
 
@@ -83,7 +65,7 @@ The primary scripts to destroy, deploy, and validate metadata are:
     - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
     - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
     - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.
-`scripts/bash/package_check.sh` - To check the package before validating and deploying metadata to Salesforce orgs.
+- `scripts/bash/package_check.sh` - To check the package before validating and deploying metadata to Salesforce orgs.
     - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
 - `scripts/bash/destroy_metadata_sf.sh`
     - `$DESTRUCTIVE_CHANGES_PACKAGE` should be the path to the `destructive/destructiveChanges.xml` created by the sfdx-git-delta plugin. `$DESTRUCTIVE_PACKAGE` should be the path to the `destructive/package.xml` created by the sfdx-git-delta plugin.
@@ -94,6 +76,3 @@ The primary scripts to destroy, deploy, and validate metadata are:
     - `$CI_JOB_STAGE` must be "validate", "destroy", or "deploy" to have slack post the right message.
     - `$CI_JOB_STATUS` must be "success" for successful pipelines and some other value for failed pipelines.
     - `GITLAB_USER_NAME`, `CI_JOB_URL`, `CI_PROJECT_URL`, `CI_COMMIT_SHA` should be adjusted for the platform to have the correct details.
-
-
-Adjustments for the `scripts/bash/merge_main_into_sbx.sh` (merge main branch backwards into other org branches when using the org branching strategy) and `scripts/bash/rollback.sh` (rollback previous deployments) will have to be made based on the platform as well.
