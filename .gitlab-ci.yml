@@ -15,7 +15,6 @@ variables:
   DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
   DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
   DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
-  # Update webhook URL here for your slack channel
   SLACK_WEBHOOK: https://hooks.slack.com/services/
 
 #####################################################
@@ -76,6 +75,8 @@ variables:
 ####################################################
 .destroy-metadata:
   extends: .salesforce-container
+  variables:
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
