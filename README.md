@@ -46,7 +46,7 @@ If connected apps are found in the package for validations or deployments, the `
 
 ### Validation Merge Request Pipelines
 
-In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted.
+In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted. I also recommend enabling "Enable merged results pipelines" under "Merge options".
 
 ## Bot Deployments
 
