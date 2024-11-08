@@ -29,7 +29,7 @@ variables:
     - apt-get install -y nodejs
     - npm install --global @salesforce/cli@latest
     - echo y | sf plugins install sfdx-git-delta@latest
-    - echo y | sf plugins install apextestlist@latest;
+    - echo y | sf plugins install apextestlist@latest
     - sf version --verbose --json
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
