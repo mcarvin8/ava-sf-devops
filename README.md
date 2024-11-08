@@ -33,7 +33,9 @@ Each job in the merge request pipeline is manually triggered and can be protecte
 
 This is where I suggest using CI/CD environment protection rules.
 
-When the merge is accepted into the default branch, the push pipeline will destroy any destructive metadata in production and then deploy constructive changes to production.
+When the merge is accepted into the default branch, the push pipeline will run automatiicaly to destroy any destructive metadata in production and then deploy constructive changes to production.
+
+The destructive deployment job is allowed to fail in order to not block the constructive deployment or to allow the destruction to run after the constructive.
 
 ## Slack Posts
 
