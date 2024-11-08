@@ -1,0 +1,257 @@
+cache:
+  key: ${CI_COMMIT_REF_NAME}
+  paths:
+    - .sf/
+    - .sfdx/
+
+stages:
+  - validate
+  - destroy
+  - deploy
+
+variables:
+  DEPLOY_TIMEOUT: 240
+  DEPLOY_PACKAGE: "package/package.xml"
+  DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
+  DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
+  DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
+  SLACK_WEBHOOK: https://hooks.slack.com/services/
+
+#####################################################
+# Define a container to install the Salesforce CLI.
+####################################################
+.salesforce-container:
+  image: ubuntu:latest
+  before_script:
+    - apt-get update
+    - apt-get install -y curl git
+    - curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+    - apt-get install -y nodejs
+    - npm install --global @salesforce/cli@latest
+    - echo y | sf plugins install sfdx-git-delta@latest
+    - echo y | sf plugins install apextestlist@latest
+    - sf version --verbose --json
+    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
+    - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
+
+####################################################
+# Validate metadata in a Salesforce org.
+####################################################
+.validate-metadata:
+  extends: .salesforce-container
+  variables:
+    # This will work in merge request pipelines and merged results pipelines
+    BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+  cache:
+    key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+    paths:
+      - .sf/
+      - .sfdx/
+  script:
+    - source ./scripts/bash/package_check.sh
+    - source ./scripts/bash/deploy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+    - rm $DEPLOY_PACKAGE
+
+####################################################
+# Deploy metadata into a Salesforce org.
+####################################################
+.deploy-metadata:
+  extends: .salesforce-container
+  variables:
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+  script:
+    - source ./scripts/bash/package_check.sh
+    - source ./scripts/bash/deploy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+    - rm $DEPLOY_PACKAGE
+
+####################################################
+# Destroy metadata in a Salesforce org.
+# Destructive Apex deployments require tests in Production.
+# Ensure environment name is "prd".
+####################################################
+.destroy-metadata:
+  extends: .salesforce-container
+  variables:
+    BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+  script:
+    - source ./scripts/bash/destroy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+
+####################################################
+# Declare jobs for the sandbox org.
+####################################################
+validate:dev:
+  extends: .validate-metadata
+  stage: validate
+  resource_group: dev
+  rules:
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: validate-sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+deploy:dev:
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: dev
+  rules:
+    - if: $SANDBOX_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:dev:
+  extends: .destroy-metadata
+  stage: destroy
+  resource_group: dev
+  rules:
+    - if: $SANDBOX_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Declare jobs for the fqa org.
+####################################################
+validate:fqa:
+  extends: .validate-metadata
+  stage: validate
+  resource_group: fqa
+  rules:
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
+  environment:
+    name: validate-fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+deploy:fqa:
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: fqa
+  rules:
+    - if: $FQA_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
+  environment:
+    name: fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:fqa:
+  extends: .destroy-metadata
+  stage: destroy
+  resource_group: fqa
+  rules:
+    - if: $FQA_DISABLED
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
+  environment:
+    name: fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Declare jobs for the production org.
+####################################################
+validate:prd:
+  extends: .validate-metadata
+  stage: validate
+  resource_group: prd
+  rules:
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
+  environment:
+    name: validate-prod
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+deploy:prd:
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: prd
+  rules:
+    - if: $PRD_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
+  environment:
+    name: prd
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:prd:
+  extends: .destroy-metadata
+  stage: destroy
+  resource_group: prd
+  rules:
+    - if: $PRD_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
+  environment:
+    name: prd
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2

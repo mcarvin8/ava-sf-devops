@@ -1,13 +1,17 @@
 # Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
-This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs. Each Salesforce org has its own long-running Git branch.
+This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
-This model uses the following 2 Salesforce CLI plugins:
+Two models are provided
+- The default model = Org Branching Model (aka each org has its own long-running branch)
+- Alternative model = 1 long running branch similar to Git Flow model
+
+Both models use these 2 Salesforce CLI plugins:
 1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
 2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
 
-## CI/CD Jobs
+## Default CI/CD Model - Org Branches
 
-The pipeline is divided into the following stages:
+The default model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch.
 
 - The `validate` stage contains jobs for each org. When a merge request is opened against one of the org branches, it will validate the changes in the org.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
@@ -15,14 +19,32 @@ The pipeline is divided into the following stages:
     - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
-The deployment, validation, and destruction status can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml`:
+
+## Alternative CI/CD Model - 1 Long Running Branch
+
+The other model in `one-branch.gitlab-ci.yml` is for 1 long running branch that is default such as `main`. 
+
+When a merge request is open against the default branch, a merge request pipeline will be created to:
+1. Validate changes in each sandbox org ("dev" and "fqa" in the example) and production. The validation is allowed to fail in order to not block sandbox deployments.
+2. If destructive changes are made, destroy metadata in each sandbox org. The destruction is allowed to fail in order to not block sandbox deployments.
+3. Deploy changes to each sandbox org.
+
+Each job in the merge request pipeline is manually triggered and can be protected by creating protected CI/CD environments to limit those who can trigger the jobs.
+
+This is where I suggest using CI/CD environment protection rules.
+
+When the merge is accepted into the default branch, the push pipeline will destroy any destructive metadata in production and then deploy constructive changes to production.
+
+## Slack Posts
+
+The deployment, validation, and destruction statuses can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml` you use:
 
 ``` yaml
   # Update webhook URL here for your slack channel
   SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 ```
 
-Delete this variable and the step in each `after_script` section if you are not using slack.
+Delete this variable and the step in each `after_script` section that runs `scripts/bash/deploy_slack_status.sh` if you are not using slack.
 
 ## Declare Metadata to Deploy
 
@@ -46,7 +68,15 @@ If connected apps are found in the package for validations or deployments, the `
 
 ### Validation Merge Request Pipelines
 
-In the "Merge requests" settings, enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted. I also recommend enabling "Enable merged results pipelines" under "Merge options".
+In the "Merge requests" settings, you can enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted. I also recommend enabling "Enable merged results pipelines" under "Merge options".
+
+### Protected CI/CD Environments
+
+You can protect each CI/CD environment to limit those who can deploy to the orgs.
+
+In both models, the validation environments start with "validate-", which you can allow anyone to validate.
+
+But for destructions and deployments, I would recommend protecting these environments to limit those who can permanently change the target org.
 
 ## Bot Deployments
 
