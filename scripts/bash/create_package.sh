@@ -1,5 +1,9 @@
 #!/bin/bash
 # $COMMIT_MSG should vary when validating from a merge request
+# $COMMIT_MSG: $CI_MERGE_REQUEST_DESCRIPTION for validation
+# $COMMIT_MSG: $CI_COMMIT_MESSAGE for deployment
+# $DEPLOY_PACKAGE needs to be re-defined as "package.xml" in the .gitlab-ci.yml to use this script
+# Only use this script for validate and deploy to allow additional metadata. Fully rely on sfdx-git-delta for destruction packages.
 
 # Define a function to build package.xml from commit message
 build_package_from_commit() {
