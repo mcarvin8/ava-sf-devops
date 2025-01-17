@@ -1,41 +1,23 @@
 # Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
 This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
-Two models are provided
-- The default model = Org Branching Model (aka each org has its own long-running branch)
-- Alternative model = 1 long running branch similar to Git Flow model
-
 Both models use these 2 Salesforce CLI plugins:
 1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
 2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
 
 ## Default CI/CD Model - Org Branches
 
-The default model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch.
+The default model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy.
 
-- The `validate` stage contains jobs for each org. When a merge request is opened against one of the org branches, it will validate the changes in the org.
+- The `test` stage contains jobs to either validate metadata before deployment to each org or run all local tests in an org on a schedule. 
+    - When a merge request is opened against one of the org branches, it will validate the changes in the org.
+    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest" and define `$AUTH_URL` with the applicable org auth URL, it will run all local tests in your org.
+        - See inspiration bethod method: https://www.pablogonzalez.io/how-to-schedule-run-all-tests-in-salesforce-with-github-actions-for-unlimited-salesforce-orgs-nothing-to-install/
+- The `quality` stage runs SonarQube scans if you have SonarQube. The job will run in MRs against each org branch as pre-deployment validation or apart of the scheduled `unitTest` job.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
     - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
-
-
-## Alternative CI/CD Model - 1 Long Running Branch
-
-The other model in `one-branch.gitlab-ci.yml` is for 1 long running branch that is default such as `main`. 
-
-When a merge request is open against the default branch, a merge request pipeline will be created to:
-1. Validate changes in each sandbox org ("dev" and "fqa" in the example) and production. The validation is allowed to fail in order to not block sandbox deployments.
-2. If destructive changes are made, destroy metadata in each sandbox org. The destruction is allowed to fail in order to not block sandbox deployments.
-3. Deploy changes to each sandbox org.
-
-Each job in the merge request pipeline is manually triggered and can be protected by creating protected CI/CD environments to limit those who can trigger the jobs.
-
-This is where I suggest using CI/CD environment protection rules.
-
-When the merge is accepted into the default branch, the push pipeline will run automatiicaly to destroy any destructive metadata in production and then deploy constructive changes to production.
-
-The destructive deployment job is allowed to fail in order to not block the constructive deployment or to allow the destruction to run after the constructive.
 
 ## Slack Posts
 

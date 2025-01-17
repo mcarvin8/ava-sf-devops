@@ -5,7 +5,8 @@ cache:
     - .sfdx/
 
 stages:
-  - validate
+  - test
+  - quality
   - destroy
   - deploy
 
@@ -33,6 +34,109 @@ variables:
     - sf version --verbose --json
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
+
+####################################################
+# Scheduled Apex Test Run jobs. Only to be run on schedules with the quality job.
+####################################################
+test:unit:
+  extends: .salesforce-container
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'unitTest'
+      when: always
+    - when: never
+  allow_failure: false
+  artifacts:
+    paths:
+      - test_run_id.txt
+    expire_in: 1 day 
+  script:
+    - echo $AUTH_URL | sf org login sfdx-url --set-default --sfdx-url-stdin
+    - sf apex run test --test-level RunLocalTests --result-format human > ./id.txt
+    - echo "$(node ./extractId.js)" > ./test_run_id.txt
+    - TEST_RUN_ID=$(cat test_run_id.txt)
+    - echo "Test run has started. The test run ID is $TEST_RUN_ID"
+  tags:
+    - aws,prd,us-west-2
+
+test:postrun:
+  extends: .salesforce-container
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'unitTest'
+      when: delayed
+      start_in: 4 hours
+      needs: ['test:unit']
+    - when: never
+  allow_failure: false
+  artifacts:
+    paths:
+      - coverage.xml
+      - coverage/*
+    expire_in: 7 days
+  script:
+    - echo y | sf plugins install apex-code-coverage-transformer@latest
+    - TEST_RUN_ID=$(cat test_run_id.txt)
+    - echo $AUTH_URL | sf org login sfdx-url --set-default --sfdx-url-stdin
+    # set || true so job passes even if there are failed tests
+    - sf apex get test --test-run-id $TEST_RUN_ID --code-coverage -r json -d "coverage" > result.json || true
+    - source ./scripts/bash/parse_test_result.sh
+  after_script:
+    - source ./scripts/bash/post_test_result.sh; share_slack_update_build
+  tags:
+    - aws,prd,us-west-2
+
+####################################################
+# Scan the code base with SonarQube.
+####################################################
+quality:
+  image:
+    name: sonarsource/sonar-scanner-cli:5.0.1
+  stage: quality
+  cache:
+    key: $CI_JOB_NAME
+    paths:
+      - .sonar/cache
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'unitTest'
+      when: always
+      variables:
+        SONAR_REF: $CI_COMMIT_REF_NAME
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      changes:
+        - '**/classes/*.cls'
+        - '**/triggers/*.trigger'
+      variables:
+        SONAR_REF: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+      when: always
+    - when: never
+  allow_failure: true
+  variables:
+    SONAR_USER_HOME: '${CI_PROJECT_DIR}/.sonar'
+    GIT_DEPTH: '0'
+    SONAR_LOGIN: $SONAR_TOKEN
+    SONAR_HOST_URL: $SONAR_URL
+    SONAR_GATE: 'false'
+  script:
+    - |
+      if [ -f coverage.xml ]; then
+        sonar-scanner \
+          -Dsonar.qualitygate.wait=$SONAR_GATE \
+          -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
+          -Dsonar.gitlab.ref_name=$SONAR_REF \
+          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
+          -Dsonar.coverageReportPaths=coverage.xml
+      else
+        sonar-scanner \
+          -Dsonar.qualitygate.wait=$SONAR_GATE \
+          -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
+          -Dsonar.gitlab.ref_name=$SONAR_REF \
+          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
+      fi
+  tags:
+    - aws,prd,us-west-2
 
 ####################################################
 # Validate metadata in a Salesforce org.
@@ -85,9 +189,9 @@ variables:
 ####################################################
 # Declare jobs for the sandbox org.
 ####################################################
-validate:dev:
+test:predeploy:dev:
   extends: .validate-metadata
-  stage: validate
+  stage: test
   resource_group: dev
   rules:
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -145,9 +249,9 @@ destroy:dev:
 ####################################################
 # Declare jobs for the fqa org.
 ####################################################
-validate:fqa:
+test:predeploy:fqa:
   extends: .validate-metadata
-  stage: validate
+  stage: test
   resource_group: fqa
   rules:
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -205,9 +309,9 @@ destroy:fqa:
 ####################################################
 # Declare jobs for the production org.
 ####################################################
-validate:prd:
+test:predeploy:prd:
   extends: .validate-metadata
-  stage: validate
+  stage: test
   resource_group: prd
   rules:
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
