@@ -12,9 +12,11 @@ The default model in `.gitlab-ci.yml` is the org branching model, where each Sal
 
 - The `test` stage contains jobs to either validate metadata before deployment to each org or run all local tests in an org on a schedule. 
     - When a merge request is opened against one of the org branches, it will validate the changes in the org.
-    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest" and define `$AUTH_URL` with the applicable org auth URL, it will run all local tests in your org.
+    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in your org.
+        - Define `$AUTH_URL` and `$AUTH_ALIAS` when creating this scheduled pipeline.
         - See inspiration bethod method: https://www.pablogonzalez.io/how-to-schedule-run-all-tests-in-salesforce-with-github-actions-for-unlimited-salesforce-orgs-nothing-to-install/
 - The `quality` stage runs SonarQube scans if you have SonarQube. The job will run in MRs against each org branch as pre-deployment validation or apart of the scheduled `unitTest` job.
+    - This job uses the [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer) to create the code coverage artifact. This report format can be updated to other ones if you want to update this from SonarQube to a different quality platform.
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
     - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
