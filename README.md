@@ -1,9 +1,10 @@
 # Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
 This repository demonstrates how to use GitLab actions, the Salesforce CLI, and custom scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
-Both models use these 2 Salesforce CLI plugins:
+The model uses these Salesforce CLI plugins:
 1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
 2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
+3. [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
 
 ## Default CI/CD Model - Org Branches
 
