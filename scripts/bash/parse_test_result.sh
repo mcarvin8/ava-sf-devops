@@ -32,7 +32,7 @@ TESTS_RAN=$(echo "$SUMMARY" | jq -r '.testsRan')
 FAILING=$(echo "$SUMMARY" | jq -r '.failing')
 
 if [[ "$OUTCOME" == "Failed" ]]; then
-    SUMMARY_TEXT="❌   Automated unit testing for ${HOSTNAME} has *${OUTCOME}* with ${TESTS_RAN} test runs and ${FAILING} failure(s). Test run ID is ${TEST_RUN_ID}. \nDownload pipeline artifacts from ${CI_JOB_URL}."
+    SUMMARY_TEXT="❌   Automated unit testing for ${HOSTNAME} has *${OUTCOME}* with ${TESTS_RAN} test runs and ${FAILING} failure(s). Test run ID is ${TEST_RUN_ID}. Download pipeline artifacts from ${CI_JOB_URL}."
 else
     SUMMARY_TEXT="✅   Automated unit testing for ${HOSTNAME} has *${OUTCOME}* 🎉 Test run ID is ${TEST_RUN_ID}."
 fi
