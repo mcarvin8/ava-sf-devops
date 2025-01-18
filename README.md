@@ -6,9 +6,9 @@ The model uses these Salesforce CLI plugins:
 2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
 3. [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
 
-## Default CI/CD Model - Org Branches
+## CI/CD Model
 
-The default model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy.
+The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy.
 
 - The `test` stage contains jobs to either validate metadata before deployment or run all local tests in an org on a schedule. 
     - When a merge request is opened against one of the org branches, it will validate the changes in the org.
