@@ -8,7 +8,7 @@ The model uses these Salesforce CLI plugins:
 
 ## CI/CD Model
 
-The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy.
+The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy, i.e. update the branches in the rules to target 1 branch upon merge or 1 branch when a merge request is opened against it.
 
 - The `test` stage contains jobs to either validate metadata before deployment or run all local tests in an org on a schedule. 
     - When a merge request is opened against one of the org branches, it will validate the changes in the org.
