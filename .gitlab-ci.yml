@@ -139,6 +139,10 @@ quality:
 ####################################################
 .validate-metadata:
   extends: .salesforce-container
+  artifacts:
+    paths:
+      - coverage.xml
+    expire_in: 7 days
   variables:
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
@@ -148,6 +152,7 @@ quality:
       - .sf/
       - .sfdx/
   script:
+    - echo y | sf plugins install apex-code-coverage-transformer@latest
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
