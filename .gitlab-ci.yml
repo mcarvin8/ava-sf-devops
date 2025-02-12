@@ -5,6 +5,7 @@ cache:
     - .sfdx/
 
 stages:
+  - pipeline
   - test
   - quality
   - destroy
@@ -34,6 +35,48 @@ variables:
     - sf version --verbose --json
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
+
+####################################################
+# Rollback pipeline.
+# Only runs on web-based pipelines when $SHA variable is provided.
+####################################################
+rollback:
+  stage: pipeline
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $SHA
+      when: always
+    - when: never
+  allow_failure: false
+  before_script:
+    - git fetch -q
+    - git config user.name "${BOT_NAME}"
+    - git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+    - git checkout -q $CI_COMMIT_BRANCH
+    - git pull --ff -q
+  script:
+    - source ./scripts/bash/rollback.sh
+    - git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+  after_script:
+    - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
+    - git branch -D $CI_COMMIT_BRANCH
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Push commits on main branch back to sandbox branches.
+# Remove depending on your branching strategy.
+####################################################
+prodBackfill:
+  stage: pipeline
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+    - when: never
+  allow_failure: true
+  script:
+    - source ./scripts/bash/merge_main_into_sbx.sh
+  tags: 
+    - aws,prd,us-west-2
 
 ####################################################
 # Scheduled Apex Test Run jobs. Only to be run on schedules with the quality job.

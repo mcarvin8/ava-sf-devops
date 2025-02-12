@@ -1,9 +1,7 @@
 #!/bin/bash
 set -e
-# CI/CD Variables to Set in Repo:
-# $BOT_NAME = name of the project access token/bot user - ex: JARVIS
-# $BOT_USER_NAME = user name for the project access token bot user - ex: project_{project_id}_bot_{random_string}
-# $PROJECT_TOKEN = project access token passphrase
+# Push commits on `main` branch back to other branches
+# Only needed if you create branches from `main` branch but have to merge them into other long-running branches.
 
 function accept_incoming_changes_merge() {
     # check if there are any merge conflicts
