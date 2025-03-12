@@ -45,15 +45,21 @@ Delete this variable and the step in each `after_script` section that runs `scri
 
 ## Declare Metadata to Deploy
 
-This org model uses a manifest file (package.xml) to run delta deployments. The sfdx-git-delta plugin will create a incremental package.xml by comparing the changes between the current commit and previous commit.
+This org model uses a manifest file (package.xml) to run incremental deployments.
 
-In addition for the validate and deploy jobs, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message. You can update your GitLab repo settings to include the MR description automatically in the merge commit message. The manual package contents should be in between `<Package>` and `</Package>` tags.
+All jobs use the sfdx-git-delta plugin will create a incremental package.xml by comparing the changes between the current commit and previous commit.
+
+The packages created in each job are checked to search for Apex Classes, Apex Triggers, and Connected Apps.
+
+### Validations and Deployment Packages
+
+In addition to the sfdx-git-delta package, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message. You can update your GitLab repo settings to include the MR description automatically in the merge commit message. The manual package contents should be in between `<Package>` and `</Package>` tags.
 
 The sfdx-git-delta package and commit message package are combined using the sf-package-combiner plugin to make the final package to deploy.
 
-The destroy job just uses the sfdx-git-delta destructive changes package.
+### Destructive Packages
 
-The package is checked to search for Apex Classes, Apex Triggers, and Connected Apps. See below:
+The destroy job just uses the sfdx-git-delta destructive changes package.
 
 ### Declare Apex Tests
 
