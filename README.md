@@ -1,5 +1,6 @@
-# Salesforce Org Model for GitLab CI/CD using the Salesforce CLI (`sf`)
-This repository demonstrates how to use GitLab actions, the Salesforce CLI, Salesforce CLI plugins, and bash scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
+# ava-sf-devops
+
+This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`), Salesforce CLI plugins, and bash scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
 The model uses these Salesforce CLI plugins:
 1. [sfdx-git-delta](https://github.com/scolladon/sfdx-git-delta)
