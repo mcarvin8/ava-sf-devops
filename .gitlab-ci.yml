@@ -167,7 +167,7 @@ quality:
           -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
           -Dsonar.gitlab.ref_name=$SONAR_REF \
           -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
-          -Dsonar.coverageReportPaths=coverage.xml
+          -Dsonar.jacoco.reportPath=coverage.xml
       else
         sonar-scanner \
           -Dsonar.qualitygate.wait=$SONAR_GATE \
