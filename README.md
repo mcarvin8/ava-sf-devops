@@ -126,7 +126,7 @@ If you do not want to use this feature, remove the `replacements` key in the `sf
 
 ## Ad-Hoc Pipelines
 
-The ad-hoc pipelines require a GitLab project access token to perform git operations. The token should have a "Maintainer" role with "api" and "write_repository" scope enabled.
+The optional ad-hoc pipelines require a GitLab project access token to perform git operations. The token should have a "Maintainer" role with "api" and "write_repository" scope enabled.
 
 These CI/CD variables should be configured in the repo with the token attributes:
 
@@ -143,10 +143,10 @@ The bash scripts in `scripts/bash` could work on other CI/CD platforms as long a
 The primary scripts to destroy, deploy, and validate metadata are:
 - `scripts/bash/deploy_metadata_sf.sh` - To validate and deploy metadata to Salesforce orgs. Tests are set by `scripts/bash/package_check.sh`.
     - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
-    - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
+    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
     - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.
 - `scripts/bash/package_check.sh` - To check the package before validating and deploying metadata to Salesforce orgs.
-    - `$DEPLOY_PACKAGE` should be the path to the package.xml created by the sfdx-git-delta plugin.
+    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
 - `scripts/bash/destroy_metadata_sf.sh`
     - `$DESTRUCTIVE_CHANGES_PACKAGE` should be the path to the `destructive/destructiveChanges.xml` created by the sfdx-git-delta plugin. `$DESTRUCTIVE_PACKAGE` should be the path to the `destructive/package.xml` created by the sfdx-git-delta plugin.
     - `$CI_ENVIRONMENT_NAME` must be "prd" for production orgs in order to run apex tests when destroying Apex in production, per Salesforce requirement. Sandbox org names do not matter.
@@ -156,3 +156,6 @@ The primary scripts to destroy, deploy, and validate metadata are:
     - `$CI_JOB_STAGE` must be "validate", "destroy", or "deploy" to have slack post the right message.
     - `$CI_JOB_STATUS` must be "success" for successful pipelines and some other value for failed pipelines.
     - `GITLAB_USER_NAME`, `CI_JOB_URL`, `CI_PROJECT_URL`, `CI_COMMIT_SHA` should be adjusted for the platform to have the correct details.
+- `scripts/bash/create_package.sh`
+    - `$COMMIT_MSG` should be the commit message containing the backup package.xml contents in list format
+    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
