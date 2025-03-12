@@ -199,6 +199,7 @@ quality:
   script:
     - echo y | sf plugins install apex-code-coverage-transformer@latest
     - source ./scripts/bash/create_package.sh
+    - source ./scriots/bash/convert_package_to_list.sh
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
@@ -216,6 +217,7 @@ quality:
   script:
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/create_package.sh
+    - source ./scriots/bash/convert_package_to_list.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
