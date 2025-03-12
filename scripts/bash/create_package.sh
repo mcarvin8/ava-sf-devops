@@ -79,7 +79,8 @@ EOF
 # Run the function
 build_package_from_commit "$COMMIT_MSG" "$DEPLOY_PACKAGE"
 
-# combine packages with plugin if providsx in commit message
+# combine packages with plugin if provided in commit message
+# use developer provided API version if found, otherwise omit the API version to default to other source API version inputs
 if [[ "$PACKAGE_FOUND" == "True" ]]; then
     echo "Combining package in commit message with automated diff package..."
     if [[ "$VERSION_FOUND" == "True" ]]; then
@@ -89,6 +90,6 @@ if [[ "$PACKAGE_FOUND" == "True" ]]; then
     fi
 else
     echo "Fully relying on automated diff package..."
-    # reparse delta package with combiner plugin to remove api version (default to other source api version inputs)
+    # reparse delta package with combiner plugin to omit the API version to default to other source API version inputs
     sf sfpc combine -f "package/package.xml" -c "$DEPLOY_PACKAGE" -n
 fi
