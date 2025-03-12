@@ -5,6 +5,7 @@ The model uses these Salesforce CLI plugins:
 1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
 2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
 3. [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
+4. [SF Package Combiner](https://github.com/mcarvin8/sf-package-combiner)
 
 ## CI/CD Model
 
@@ -46,7 +47,15 @@ Delete this variable and the step in each `after_script` section that runs `scri
 
 This org model uses a manifest file (package.xml) to run delta deployments. The SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
 
-This package is then checked to search for Apex Classes, Apex Triggers, and Connected Apps. See below:
+In addition for the validate and deploy jobs, the developer can supply additional metadata to deploy by adding package.xml contents to the merge request description/commit message. You can update your GitLab repo settings to include the MR description automatically in merge commit messages.
+
+The manual package contents should be in between `<Package>` and `</Package>` tags.
+
+The sfdx-git-delta package and manual package are combined using the sf-package-combiner plugin to make the final package to deploy.
+
+The destroy job just uses the sfdx-git-delta destructive changes package.
+
+The package is checked to search for Apex Classes, Apex Triggers, and Connected Apps. See below:
 
 ### Declare Apex Tests
 
