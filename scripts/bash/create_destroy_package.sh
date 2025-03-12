@@ -60,4 +60,4 @@ EOF
 
 echo "Destructive Package created in $DEPLOY_PACKAGE."
 # need an empty package.xml for destructive deployments
-cp -f "scripts/packages/destructivePackage.xml" "$DESTRUCTIVE_PACKAGE"
+sf sfpc combine -c "$DESTRUCTIVE_PACKAGE" -n
