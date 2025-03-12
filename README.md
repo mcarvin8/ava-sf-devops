@@ -15,14 +15,9 @@ The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Sales
 
 ### Stages and Jobs
 
-- `pipeline` stage = optional ad-hoc jobs which can be deleted if desired
-   - `rollback` job = roll-back previous deployments via a web-based pipeline. This requires a GitLab project access token with sufficent repo access.
-       - the `BOT_NAME` CI/CD variable should be the name of the project access token user
-       - the `BOT_USER_NAME` CI/CD variable should be the user name of the project access token user
-       - the `PROJECT_TOKEN` CI/CD variable should contain the project access token value
-       - Go to the repo, then go to Build > Pipelines. Press "New pipeline". Select the applicable branch in "Run for branch name or tag". Enter 1 new CI/CD variable for the job. The variable key should be `SHA` and hte variable value should be the SHA to revert/roll-back.
-    - `prodBackfill` job = If you create branches from `main` (default branch) but have to merge them into other long-running branches, this job can be used to refresh those long-running branches with changes from `main`.
-       - This job can use the same GitLab project access token which the `rollback` job uses and requires the `BOT_NAME`/`BOT_USER_NAME`/`PROJECT_TOKEN` variables.
+- `pipeline` stage = optional ad-hoc jobs which can be deleted if desired. See "Ad-Hoc Pipelines" section.
+   - `rollback` job = roll-back previous deployments via a web-based pipeline.
+   - `prodBackfill` job = If you create branches from `main` (default branch) but have to merge them into other long-running branches, this job can be used to refresh those long-running branches with changes from `main`.
 - `test` stage = test changes before and after deployment
     - When a merge request (MR) is opened, it will validate the metadata changes in the target org.
     - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in the target org.
@@ -108,6 +103,18 @@ But for destructions and deployments, I would recommend protecting these environ
 To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
 
 If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
+
+## Ad-Hoc Pipelines
+
+The ad-hoc pipelines require a GitLab project access token to perform git operations. The token should have a "Maintainer" role with "api" and "write_repository" scope enabled.
+
+These CI/CD variables should be configured in the repo with the token attributes:
+
+- `BOT_NAME` should be the name of the project access token user
+- `BOT_USER_NAME` should be the user name of the project access token user
+- `PROJECT_TOKEN`  should contain the project access token value
+
+The `rollback` pipeline is web-based. Go to the repo, then go to Build > Pipelines. Press "New pipeline". Select the applicable branch in "Run for branch name or tag". Enter 1 new CI/CD variable for the job. The variable key should be `SHA` and hte variable value should be the SHA to revert/roll-back.
 
 ## Other CI/CD Platforms
 
