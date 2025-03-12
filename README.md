@@ -48,7 +48,7 @@ Delete this variable and the step in each `after_script` section that runs `scri
 
 This org model uses a manifest file (package.xml) to run incremental deployments.
 
-All jobs use the sfdx-git-delta plugin will create a incremental package.xml by comparing the changes between the current commit and previous commit.
+All jobs use the sfdx-git-delta plugin to create a incremental package.xml via the git diff.
 
 The packages created in each job are checked to search for Apex Classes, Apex Triggers, and Connected Apps.
 
