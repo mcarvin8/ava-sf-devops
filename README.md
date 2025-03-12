@@ -9,9 +9,11 @@ The model uses these Salesforce CLI plugins:
 
 ## CI/CD Model
 
-The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules can be updated based on your branching strategy, i.e. update the branches in the rules to target 1 branch upon merge or 1 branch when a merge request is opened against it.
+The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can easily be updated based on your branching strategy, i.e.
+- update the branches in the rules to target the default branch upon merge to the default branch
+- update the sandbox jobs to run when a merge request is open against the default branch and update production jobs to run upon merge to the default branch
 
-- The `pipeline` stage contains optional ad-hoc jobs.
+- The `pipeline` stage contains optional ad-hoc jobs. Delete this stage and jobs if you wish.
    - The `rollback` job can be used to roll-back previous deployments via a web-based pipeline. This requires a GitLab project access token with sufficent repo access.
        - the `BOT_NAME` CI/CD variable should be the name of the project access token user
        - the `BOT_USER_NAME` CI/CD variable should be the user name of the project access token user
