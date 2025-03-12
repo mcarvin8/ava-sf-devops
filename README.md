@@ -10,7 +10,7 @@ The model uses these Salesforce CLI plugins:
 ## CI/CD Model
 
 The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can easily be updated based on your branching strategy, i.e.
-- update the branches in the rules to target the default branch upon merge to the default branch
+- update the branches in the rules to target the default branch upon merge to the default branch. Changes to default branch will trigger validations, deployments, and destructions in each org.
 - update the sandbox jobs to run when a merge request is open against the default branch and update production jobs to run upon merge to the default branch
 
 ### Stages and Jobs
