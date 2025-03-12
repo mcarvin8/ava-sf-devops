@@ -29,7 +29,6 @@ The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Sales
 - The `quality` stage runs SonarQube scans if you have SonarQube. The job will run after either `test` job above (pre-deployment validation or unit tests).
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
-    - To destroy Apex in production, you must run tests per Salesforce requirement. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 - The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
 
 ## Slack Posts
@@ -68,6 +67,14 @@ If Apex classes/trigger are found in the package for validations or deployments,
 You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [Apex Test List plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
 
 This plugin is not used in destructive deployments.
+
+#### Destructive Apex Tests
+
+To destroy Apex in production, you must run Apex tests in the destrucfive deployment. 
+
+Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
+
+Tests will not run when destroying Apex in sandboxes.
 
 ### Connected Apps
 
