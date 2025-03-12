@@ -13,7 +13,7 @@ stages:
 
 variables:
   DEPLOY_TIMEOUT: 240
-  DEPLOY_PACKAGE: "package/package.xml"
+  DEPLOY_PACKAGE: "package.xml"
   DESTRUCTIVE_CHANGES_PACKAGE: "destructiveChanges/destructiveChanges.xml"
   DESTRUCTIVE_PACKAGE: "destructiveChanges/package.xml"
   DESTRUCTIVE_TESTS: "AccountTriggerHandlerTest ContactTriggerHandlerTest OpportunityTriggerHandlerTest LeadTriggerHandlerTest"
@@ -197,6 +197,7 @@ quality:
       - .sfdx/
   script:
     - echo y | sf plugins install apex-code-coverage-transformer@latest
+    - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
@@ -212,6 +213,7 @@ quality:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
     - source ./scripts/bash/package_check.sh
+    - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
