@@ -60,15 +60,17 @@ The sfdx-git-delta package and commit message package are combined using the sf-
 
 The destroy job just uses the sfdx-git-delta destructive changes package.
 
-### Declare Apex Tests
+## Declare Apex Tests
 
-If Apex classes/trigger are found in the package for validations or deployments, it will run the apex tests list plugin to determine the specified tests to run, instead of running all local tests in the org.
+If Apex classes and triggers are found in the package, the pipeline will run specified tests during the deployment to satisfy code coverage requirements.
 
-You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [Apex Test List plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
+### Validations and Deployment Tests
 
-This plugin is not used in destructive deployments.
+The apex-tests-list plugin will determine the specified tests to run when validating and deploying.
 
-#### Destructive Apex Tests
+You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [apex-test-list plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
+
+### Destructive Apex Tests
 
 To destroy Apex in production, you must run Apex tests in the destrucfive deployment. 
 
