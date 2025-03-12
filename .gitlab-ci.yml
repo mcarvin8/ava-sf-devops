@@ -190,6 +190,7 @@ quality:
   variables:
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
+    COMMIT_MSG: $CI_MERGE_REQUEST_DESCRIPTION
   cache:
     key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
     paths:
@@ -211,6 +212,7 @@ quality:
   extends: .salesforce-container
   variables:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
+    COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
     - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/create_package.sh
