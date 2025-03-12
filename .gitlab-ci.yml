@@ -187,6 +187,10 @@ quality:
     paths:
       - coverage.xml
     expire_in: 7 days
+    reports:
+      coverage_report:
+        coverage_format: jacoco
+        path: coverage.xml
   variables:
     # This will work in merge request pipelines and merged results pipelines
     BEFORE_SHA: $CI_MERGE_REQUEST_DIFF_BASE_SHA
