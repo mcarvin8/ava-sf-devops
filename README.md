@@ -94,11 +94,9 @@ You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trig
 
 ### Destructive Apex Tests
 
-To destroy Apex in production, you must run Apex tests in the destrucfive deployment. 
+To destroy Apex in production, you must run Apex tests in the destructive deployment. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 
-Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
-
-Tests will not run when destroying Apex in sandboxes.
+> **Tests will not run when destroying Apex in sandboxes.**
 
 ### Connected Apps
 
