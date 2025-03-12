@@ -2,10 +2,10 @@
 This repository demonstrates how to use GitLab actions, the Salesforce CLI, Salesforce CLI plugins, and bash scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
 The model uses these Salesforce CLI plugins:
-1. [SFDX Git Delta](https://github.com/scolladon/sfdx-git-delta)
-2. [Apex Tests List](https://github.com/renatoliveira/apex-test-list)
-3. [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
-4. [SF Package Combiner](https://github.com/mcarvin8/sf-package-combiner)
+1. [sfdx-git-delta](https://github.com/scolladon/sfdx-git-delta)
+2. [apex-tests-list](https://github.com/renatoliveira/apex-test-list)
+3. [apex-code-coverage-transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
+4. [sf-package-combiner](https://github.com/mcarvin8/sf-package-combiner)
 
 ## CI/CD Model
 
@@ -45,13 +45,11 @@ Delete this variable and the step in each `after_script` section that runs `scri
 
 ## Declare Metadata to Deploy
 
-This org model uses a manifest file (package.xml) to run delta deployments. The SFDX git delta plugin will create a package.xml by comparing the changes between the current commit and previous commit.
+This org model uses a manifest file (package.xml) to run delta deployments. The sfdx-git-delta plugin will create a incremental package.xml by comparing the changes between the current commit and previous commit.
 
-In addition for the validate and deploy jobs, the developer can supply additional metadata to deploy by adding package.xml contents to the merge request description/commit message. You can update your GitLab repo settings to include the MR description automatically in merge commit messages.
+In addition for the validate and deploy jobs, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message. You can update your GitLab repo settings to include the MR description automatically in the merge commit message. The manual package contents should be in between `<Package>` and `</Package>` tags.
 
-The manual package contents should be in between `<Package>` and `</Package>` tags.
-
-The sfdx-git-delta package and manual package are combined using the sf-package-combiner plugin to make the final package to deploy.
+The sfdx-git-delta package and commit message package are combined using the sf-package-combiner plugin to make the final package to deploy.
 
 The destroy job just uses the sfdx-git-delta destructive changes package.
 
