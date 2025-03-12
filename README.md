@@ -24,8 +24,7 @@ The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Sales
     - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in your org.
         - Define `$AUTH_URL` and `$AUTH_ALIAS` when creating this scheduled pipeline.
         - See inspiration behind this method: https://www.pablogonzalez.io/how-to-schedule-run-all-tests-in-salesforce-with-github-actions-for-unlimited-salesforce-orgs-nothing-to-install/
-    - All test jobs uses the [Apex Code Coverage Transformer](https://github.com/mcarvin8/apex-code-coverage-transformer) to create the code coverage artifact. 
-        - By default, it creates a SonarQube XML that is passed to the `quality` job for SonarQube. This coverage format can be updated to other ones like Cobertura based on what code quality tool you want to use.
+    - All test jobs uses the apex-code-coverage-transformer to create the code coverage artifact in jacoco format. GitLab v17 can visualize code coverage in MRs with jacoco reports.
 - The `quality` stage runs SonarQube scans if you have SonarQube. The job will run after either `test` job above (pre-deployment validation or unit tests).
 - The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
     - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
