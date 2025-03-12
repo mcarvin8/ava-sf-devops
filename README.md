@@ -54,7 +54,7 @@ The packages created in each job are checked to search for Apex Classes, Apex Tr
 
 ### Validations and Deployment Packages
 
-In addition to the sfdx-git-delta package, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message in package list format (see example below). You can update your GitLab repo settings to include the MR description automatically in the merge commit message. The manual package contents should be in between `<Package>` and `</Package>` tags.
+In addition to the sfdx-git-delta package, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message in package list format (see example below).
 
 ```
 <Package>
@@ -63,6 +63,15 @@ MetadataType2: Member1, Member2, Member3
 Version: 60.0
 </Package>
 ```
+
+The manual package contents should be in between `<Package>` and `</Package>` tags.
+Update your GitLab repo settings to provide the tags in the default merge request description.
+
+![Default Merge Request Description](.gitlab/images/default-merge-request-description.png)
+
+Update your GitLab repo settings to include the MR description automatically in the merge commit message. 
+
+![Merge Commit Message Template](.gitlab/images/merge-commit-msg-template.png)
 
 The sfdx-git-delta package and commit message package are combined using the sf-package-combiner plugin to make the final package to deploy. If the commit message contains an API version via `Version:` (case insensitive), the sf-package-combiner will set the final package at that API version. Otherwise, the API version will be omitted from the package.xml to default to other source API version inputs.
 
