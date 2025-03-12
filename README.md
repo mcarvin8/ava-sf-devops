@@ -13,24 +13,30 @@ The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Sales
 - update the branches in the rules to target the default branch upon merge to the default branch
 - update the sandbox jobs to run when a merge request is open against the default branch and update production jobs to run upon merge to the default branch
 
-- The `pipeline` stage contains optional ad-hoc jobs. Delete this stage and jobs if you wish.
-   - The `rollback` job can be used to roll-back previous deployments via a web-based pipeline. This requires a GitLab project access token with sufficent repo access.
+### Stages and Jobs
+
+- `pipeline` stage = optional ad-hoc jobs which can be deleted if desired
+   - `rollback` job = roll-back previous deployments via a web-based pipeline. This requires a GitLab project access token with sufficent repo access.
        - the `BOT_NAME` CI/CD variable should be the name of the project access token user
        - the `BOT_USER_NAME` CI/CD variable should be the user name of the project access token user
        - the `PROJECT_TOKEN` CI/CD variable should contain the project access token value
        - Go to the repo, then go to Build > Pipelines. Press "New pipeline". Select the applicable branch in "Run for branch name or tag". Enter 1 new CI/CD variable for the job. The variable key should be `SHA` and hte variable value should be the SHA to revert/roll-back.
-    - The `prodBackfill` job can be used depending on your branching strategy. If you create branches from `main` (default branch) but have to merge them into other long-running branches, this job can be used to refresh those long-running branches with changes from `main`.
+    - `prodBackfill` job = If you create branches from `main` (default branch) but have to merge them into other long-running branches, this job can be used to refresh those long-running branches with changes from `main`.
        - This job can use the same GitLab project access token which the `rollback` job uses and requires the `BOT_NAME`/`BOT_USER_NAME`/`PROJECT_TOKEN` variables.
-- The `test` stage contains jobs to either validate metadata before deployment or run all local tests in an org on a schedule. 
-    - When a merge request is opened against one of the org branches, it will validate the changes in the org.
-    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in your org.
+- `test` stage = test changes before and after deployment
+    - When a merge request (MR) is opened, it will validate the metadata changes in the target org.
+    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in the target org.
         - Define `$AUTH_URL` and `$AUTH_ALIAS` when creating this scheduled pipeline.
         - See inspiration behind this method: https://www.pablogonzalez.io/how-to-schedule-run-all-tests-in-salesforce-with-github-actions-for-unlimited-salesforce-orgs-nothing-to-install/
     - All test jobs uses the apex-code-coverage-transformer to create the code coverage artifact in jacoco format. GitLab v17 can visualize code coverage in MRs with jacoco reports.
-- The `quality` stage runs SonarQube scans if you have SonarQube. The job will run after either `test` job above (pre-deployment validation or unit tests). This depends on the jacoco coverage report created in the `test` stage.
-- The `destroy` stage contains jobs for each org that will delete the metadata from the org if the files were deleted from the org branch. This job is allowed to fail and will fail if there are no metadata types detected in the destructive package.
-    - This will be a standalone destructive deployment that will run before the deployment by default. If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
-- The `deploy` stage contains jobs for each org that will deploy the metadata to the assigned org after a merge into the org branch.
+- `quality` stage = run SonarQube scans if you have SonarQube.
+    - Runs after all `test` jobs and depends on the jacoco coverage report created by these jobs.
+    - Delete or modify if you do not use SonarQube
+- `destroy` stage = Destroy the metadata from the org if the files were deleted from the branch. 
+    - Jobs are  allowed to fail and will fail if there are no metadata types detected in the destructive package.
+    - This will be a standalone destructive deployment that will run before the deployment by default. 
+    - If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
+- `deploy` stage = Deploy constructive metadata changes to the target org.
 
 ## Slack Posts
 
