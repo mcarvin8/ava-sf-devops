@@ -27,11 +27,12 @@ build_package_from_commit() {
 # Run the function
 build_package_from_commit "$COMMIT_MSG" "$DEPLOY_PACKAGE"
 
+# combine packages with plugin if providsx in commit message
 if [[ "$PACKAGE_FOUND" == "True" ]]; then
     echo "Combining package in commit message with automated diff package..."
-    echo y | sf plugins install sf-package-combiner@latest
     sf sfpc combine -f "package/package.xml" -f "$DEPLOY_PACKAGE" -c "$DEPLOY_PACKAGE"
 else
     echo "Fully relying on automated diff package..."
-    cp -f "package/package.xml" "$DEPLOY_PACKAGE"
+    # reparse delta package with combiner plugin to remove api version (default to other source api version inputs)
+    sf sfpc combine -f "package/package.xml" -c "$DEPLOY_PACKAGE" -n
 fi
