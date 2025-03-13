@@ -36,7 +36,7 @@ This stage ensures that metadata changes are properly validated and tested.
 
 ### 3. Quality Stage
 This stage runs SonarQube scans (if applicable) after all test jobs.
-   - Relies on JaCoCo coverage reports.
+   - Relies on JaCoCo coverage reports created by `apex-code-coverage-transformer` in the test jobs.
    - Can be modified or removed if SonarQube is not used.
 
 ### 4. Destroy Stage
@@ -48,21 +48,13 @@ Handles the deletion of metadata from the Salesforce org when files are deleted 
 ### 5. Deploy Stage
 Deploys constructive metadata changes to the target org.
 
-
-
-Delete this variable and the step in each `after_script` section that runs `scripts/bash/deploy_slack_status.sh` if you are not using slack.
-
 ## Declare Metadata to Deploy
 
-This org model uses a manifest file (package.xml) to run incremental deployments.
-
-All jobs use the sfdx-git-delta plugin to create a incremental package.xml via the git diff.
-
-The packages created in each job are checked to search for Apex Classes, Apex Triggers, and Connected Apps.
+This model uses a manifest file (`package.xml`) to run incremental deployments. The `sfdx-git-delta` plugin generates the package based on git diffs.
 
 ### Validations and Deployment Packages
 
-In addition to the sfdx-git-delta package, the developer can supply additional metadata to deploy by adding `package.xml` contents to the merge request description/commit message in package list format (see example below).
+Additional metadata can be declared in merge request descriptions or commit messages using the following format:
 
 ```
 <Package>
@@ -72,47 +64,38 @@ Version: 60.0
 </Package>
 ```
 
-The manual package contents should be in between `<Package>` and `</Package>` tags.
-Update your GitLab repo settings to provide the tags in the default merge request description.
+> `scripts/bash/convert_package_to_list.sh` can be used to convert an existing package.xml, such as one created in Workbench, into the accepted list format.
+
+This is combined with the `sfdx-git-delta` package using the `sf-package-combiner` plugin.
+
+**Repo Recommendations**
+- Update your GitLab repo settings to provide the tags in the default merge request description.
 
 ![Default Merge Request Description](.gitlab/images/default-merge-request-description.png)
 
-Update your GitLab repo settings to include the MR description automatically in the merge commit message. 
+- Update your GitLab repo settings to include the MR description automatically in the merge commit message. 
 
 ![Merge Commit Message Template](.gitlab/images/merge-commit-msg-template.png)
 
-The sfdx-git-delta package and commit message package are combined using the sf-package-combiner plugin to make the final package to deploy. If the commit message contains an API version via `Version:` (case insensitive), the sf-package-combiner will set the final package at that API version. Otherwise, the API version will be omitted from the package.xml to default to other source API version inputs.
-
-`scripts/bash/convert_package_to_list.sh` can be used to convert an existing package.xml, such as one created in Workbench, into the accepted list format.
-
 ### Destructive Packages
 
-The destroy job just uses the sfdx-git-delta destructive changes package.
+The destroy job solely relies on the `sfdx-git-delta` destructive package.
 
 ## Declare Apex Tests
 
-If Apex classes and triggers are found in the package, the pipeline will run specified tests during the deployment to satisfy code coverage requirements.
+Apex tests are required for deployments and destructive changes containing Apex classes/triggers.
 
-### Validations and Deployment Tests
+### Validation and Deployment Tests
 
-The apex-tests-list plugin will determine the specified tests to run when validating and deploying.
+The `apex-tests-list` plugin will determine the specified tests to run when validating and deploying.
 
-You must add the `@tests:` or `@testsuites:` annotations to each Apex class/trigger per the [apex-test-list plugin documentation](https://github.com/renatoliveira/apex-test-list?tab=readme-ov-file#apex-test-list).
+- Tests must be annotated with `@tests:` or `@testsuites:` in Apex classes/triggers.
 
 ### Destructive Apex Tests
 
 To destroy Apex in production, you must run Apex tests in the destructive deployment. Set the `DESTRUCTIVE_TESTS` variable in `.gitlab-ci.yml` with the pre-defined tests to run when destroying Apex in production.
 
-> **Tests will not run when destroying Apex in sandboxes.**
-
-## Slack Posts
-
-The deployment, test, and destruction statuses can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml` you use:
-
-``` yaml
-  # Update webhook URL here for your slack channel
-  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
-```
+> **Sandbox orgs do not require destructive tests.**
 
 ## Connected Apps
 If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
@@ -136,7 +119,7 @@ Protect environments to restrict who can deploy changes. Validation environments
 For Einstein Bots, update:
 - `.forceignore` to exclude bot versions not to deploy.
 - `scripts/replacementFiles` to configure the Bot User per org.
-- `sfdx-project.json` to run the right replacements per environment variables
+- `sfdx-project.json` to run the right `replacements` per environment variables
 
 > If not using this feature, remove `replacements` from `sfdx-project.json`.
 
