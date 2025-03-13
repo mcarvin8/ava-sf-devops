@@ -10,38 +10,37 @@ The model uses these Salesforce CLI plugins:
 
 ## CI/CD Model
 
-The CI/CD model in `.gitlab-ci.yml` is the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can easily be updated based on your branching strategy, i.e.
-- update the branches in the rules to target the default branch upon merge to the default branch. Changes to default branch will trigger validations, deployments, and destructions in each org.
-- update the sandbox jobs to run when a merge request is open against the default branch and update production jobs to run upon merge to the default branch
+The CI/CD model in `.gitlab-ci.yml` follows the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can be customized based on your branching strategy.
 
-### Stages and Jobs
+## Pipeline Stages
 
-- `pipeline` stage = optional ad-hoc jobs which can be deleted if desired. See "Ad-Hoc Pipelines" section.
-   - `rollback` job = roll-back previous deployments via a web-based pipeline.
-   - `prodBackfill` job = If you create branches from `main` (default branch) but have to merge them into other long-running branches, this job can be used to refresh those long-running branches with changes from `main`.
-- `test` stage = test changes before and after deployment
-    - When a merge request (MR) is opened, it will validate the metadata changes in the target org.
-    - When you create a scheduled pipeline with the `$JOB_NAME` as "unitTest", it will run all local tests in the target org.
-        - Define `$AUTH_URL` and `$AUTH_ALIAS` when creating this scheduled pipeline.
-        - See inspiration behind this method: https://www.pablogonzalez.io/how-to-schedule-run-all-tests-in-salesforce-with-github-actions-for-unlimited-salesforce-orgs-nothing-to-install/
-    - All test jobs uses the apex-code-coverage-transformer to create the code coverage artifact in jacoco format. GitLab v17 can visualize code coverage in MRs with jacoco reports.
-- `quality` stage = run SonarQube scans if you have SonarQube.
-    - Runs after all `test` jobs and depends on the jacoco coverage report created by these jobs.
-    - Delete or modify if you do not use SonarQube
-- `destroy` stage = Destroy the metadata from the org if the files were deleted from the branch. 
-    - Jobs are  allowed to fail and will fail if there are no metadata types detected in the destructive package.
-    - This will be a standalone destructive deployment that will run before the deployment by default. 
-    - If you need to deploy the destructive changes after the deployment, cancel the `destroy` stage when the pipeline is created, allow the `deploy` stage to complete, then re-run the `destroy` stage.
-- `deploy` stage = Deploy constructive metadata changes to the target org.
+### 1. Pipeline Stage (Optional Ad-Hoc Jobs)
+These are optional ad-hoc jobs that can be removed if not needed.
+   - **Rollback**: Roll back previous deployments via a web-based pipeline.
+   - **ProdBackfill**: Used to refresh long-running branches with changes from `main` when merging into other long-running branches.
 
-## Slack Posts
+### 2. Test Stage
+This stage ensures that metadata changes are properly validated and tested.
+   - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org.
+   - **Unit Testing**: A scheduled pipeline with `$JOB_NAME` set to "unitTest" runs all local tests in the target org.
+     - Requires `$AUTH_URL` and `$AUTH_ALIAS` variables.
+   - **Code Coverage**: The `apex-code-coverage-transformer` creates JaCoCo-formatted reports, which can be visualized in GitLab v17.
 
-The deployment, test, and destruction statuses can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml` you use:
+### 3. Quality Stage
+This stage runs SonarQube scans (if applicable) after all test jobs.
+   - Relies on JaCoCo coverage reports.
+   - Can be modified or removed if SonarQube is not used.
 
-``` yaml
-  # Update webhook URL here for your slack channel
-  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
-```
+### 4. Destroy Stage
+Handles the deletion of metadata from the Salesforce org when files are deleted from the branch.
+   - Jobs are allowed to fail if no metadata types are detected.
+   - Destructive deployments are run before constructive deployments by default.
+   - If destructive changes need to be deployed after constructive ones, cancel the `destroy` stage, allow `deploy` to complete, then re-run `destroy`.
+
+### 5. Deploy Stage
+Deploys constructive metadata changes to the target org.
+
+
 
 Delete this variable and the step in each `after_script` section that runs `scripts/bash/deploy_slack_status.sh` if you are not using slack.
 
@@ -98,7 +97,16 @@ To destroy Apex in production, you must run Apex tests in the destructive deploy
 
 > **Tests will not run when destroying Apex in sandboxes.**
 
-### Connected Apps
+## Slack Posts
+
+The deployment, test, and destruction statuses can be posted to a Slack channel. Update the webhook variable in the `.gitlab-ci.yml` you use:
+
+``` yaml
+  # Update webhook URL here for your slack channel
+  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
+```
+
+## Connected Apps
 
 If connected apps are found in the package for validations or deployments, the `<consumerKey>` line in each connected app meta file will be automatically removed before deployment. Deployments with connected apps will fail if you leave the consumer key in the file.
 
@@ -137,23 +145,3 @@ The `rollback` pipeline is web-based. Go to the repo, then go to Build > Pipelin
 ## Other CI/CD Platforms
 
 The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables.
-
-The primary scripts to destroy, deploy, and validate metadata are:
-- `scripts/bash/deploy_metadata_sf.sh` - To validate and deploy metadata to Salesforce orgs. Tests are set by `scripts/bash/package_check.sh`.
-    - `$CI_PIPELINE_SOURCE` must be "push" to be deploy and some other value to validate (like `merge_request_event`) from a merge request/pull request. Only the value "push" is hard-coded into the bash script.
-    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
-    - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.
-- `scripts/bash/package_check.sh` - To check the package before validating and deploying metadata to Salesforce orgs.
-    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
-- `scripts/bash/destroy_metadata_sf.sh`
-    - `$DESTRUCTIVE_CHANGES_PACKAGE` should be the path to the `destructive/destructiveChanges.xml` created by the sfdx-git-delta plugin. `$DESTRUCTIVE_PACKAGE` should be the path to the `destructive/package.xml` created by the sfdx-git-delta plugin.
-    - `$CI_ENVIRONMENT_NAME` must be "prd" for production orgs in order to run apex tests when destroying Apex in production, per Salesforce requirement. Sandbox org names do not matter.
-    - `$DEPLOY_TIMEOUT` should be the wait period for the CLI. Set to 240 in the `.gitlab-ci.yml`.   
-- `scripts/bash/deploy_slack_status.sh`
-    - `$CI_ENVIRONMENT_NAME` must be set with the org name. Optionally, validation environments can start with "validate-", which will be removed in the slack status. This is useful to create separate CI/CD environments for validations and deployments to limit those who can deploy over those who can validate.
-    - `$CI_JOB_STAGE` must be "validate", "destroy", or "deploy" to have slack post the right message.
-    - `$CI_JOB_STATUS` must be "success" for successful pipelines and some other value for failed pipelines.
-    - `GITLAB_USER_NAME`, `CI_JOB_URL`, `CI_PROJECT_URL`, `CI_COMMIT_SHA` should be adjusted for the platform to have the correct details.
-- `scripts/bash/create_package.sh`
-    - `$COMMIT_MSG` should be the commit message containing the backup package.xml contents in list format
-    - `$DEPLOY_PACKAGE` should be the path to the package.xml to be deployed
