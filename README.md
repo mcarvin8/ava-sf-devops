@@ -89,7 +89,7 @@ Apex tests are required for deployments and destructive changes containing Apex 
 
 The `apex-tests-list` plugin will determine the specified tests to run when validating and deploying.
 
-- Tests must be annotated with `@tests:` or `@testsuites:` in Apex classes/triggers.
+- Tests must be [annotated](https://github.com/renatoliveira/apex-test-list) with `@tests:` or `@testsuites:` in Apex classes/triggers.
 
 ### Destructive Apex Tests
 
