@@ -10,7 +10,7 @@ The model uses these Salesforce CLI plugins:
 
 ## CI/CD Model
 
-The CI/CD model in `.gitlab-ci.yml` follows the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can be customized based on your branching strategy.
+The CI/CD model in `.gitlab-ci.yml` follows the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can be customized based on your branching strategy (i.e. target sandbox orgs when a merge request is opened against the `main` branch and target production org when a merge request is accepted into the `main` branch or target all orgs via 1 branch).
 
 ## Pipeline Stages
 
@@ -30,7 +30,7 @@ These CI/CD variables should be configured in the repo with the token attributes
 ### 2. Test Stage
 This stage ensures that metadata changes are properly validated and tested.
    - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org.
-   - **Unit Testing**: A scheduled pipeline with `$JOB_NAME` set to "unitTest" runs all local tests in the target org.
+   - **Unit Testing**: A [scheduled pipeline](https://docs.gitlab.com/ci/pipelines/schedules/) with `$JOB_NAME` set to "unitTest" runs all local tests in the target org.
      - Requires `$AUTH_URL` and `$AUTH_ALIAS` variables.
    - **Code Coverage**: The `apex-code-coverage-transformer` creates JaCoCo-formatted reports, which can be visualized in GitLab v17.
 
