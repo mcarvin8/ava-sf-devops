@@ -19,6 +19,14 @@ These are optional ad-hoc jobs that can be removed if not needed.
    - **Rollback**: Roll back previous deployments via a web-based pipeline.
    - **ProdBackfill**: Used to refresh long-running branches with changes from `main` when merging into other long-running branches.
 
+These jobs require a GitLab project access token to perform git operations. The token should have a "Maintainer" role with "api" and "write_repository" scope enabled.
+
+These CI/CD variables should be configured in the repo with the token attributes:
+
+- `BOT_NAME` should be the name of the project access token user
+- `BOT_USER_NAME` should be the user name of the project access token user
+- `PROJECT_TOKEN`  should contain the project access token value
+
 ### 2. Test Stage
 This stage ensures that metadata changes are properly validated and tested.
    - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org.
@@ -107,41 +115,31 @@ The deployment, test, and destruction statuses can be posted to a Slack channel.
 ```
 
 ## Connected Apps
+If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
 
-If connected apps are found in the package for validations or deployments, the `<consumerKey>` line in each connected app meta file will be automatically removed before deployment. Deployments with connected apps will fail if you leave the consumer key in the file.
+## Slack Integration
+Deployment, test, and destruction statuses can be posted to a Slack channel.
+Update the webhook URL in `.gitlab-ci.yml`:
+```yaml
+SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
+```
+To disable Slack notifications, remove this variable and the `scripts/bash/deploy_slack_status.sh` step.
 
 ## Branch Protection
-
 ### Validation Merge Request Pipelines
-
-In the "Merge requests" settings, you can enable "Pipelines must succeed" to ensure the merge request validation passes before the request can be accepted.
+Enable "Pipelines must succeed" in GitLab's Merge Request settings to enforce validation before merging.
 
 ### Protected CI/CD Environments
-
-You can protect each CI/CD environment to limit those who can deploy to the orgs.
-
-The pre-deploy validation environments start with "validate-", which you can allow anyone to validate.
-
-But for destructions and deployments, I would recommend protecting these environments to limit those who can permanently change the target org.
+Protect environments to restrict who can deploy changes. Validation environments (`validate-*`) can be left open, while destructive and deploy environments should be restricted.
 
 ## Bot Deployments
+For Einstein Bots, update:
+- `.forceignore` to exclude bot versions not to deploy.
+- `scripts/replacementFiles` to configure the Bot User per org.
+- `sfdx-project.json` to run the right replacements per environment variables
 
-To deploy Einstein Bots, you should update the `.forceignore` file with bot versions to not deploy/retrieve (such as the active bot version) and you should also update the `scripts/replacementFiles` with the Bot User for each org, if you are configuring the bot user. The metadata string replacements are done automatically by the Salesforce CLI before deployment and they are dependent on the `AUTH_ALIAS` variables configure in the `.gitlab-ci.yml`.
-
-If you do not want to use this feature, remove the `replacements` key in the `sfdx-project.json`.
-
-## Ad-Hoc Pipelines
-
-The optional ad-hoc pipelines require a GitLab project access token to perform git operations. The token should have a "Maintainer" role with "api" and "write_repository" scope enabled.
-
-These CI/CD variables should be configured in the repo with the token attributes:
-
-- `BOT_NAME` should be the name of the project access token user
-- `BOT_USER_NAME` should be the user name of the project access token user
-- `PROJECT_TOKEN`  should contain the project access token value
-
-The `rollback` pipeline is web-based. Go to the repo, then go to Build > Pipelines. Press "New pipeline". Select the applicable branch in "Run for branch name or tag". Enter 1 new CI/CD variable for the job. The variable key should be `SHA` and hte variable value should be the SHA to revert/roll-back.
+> If not using this feature, remove `replacements` from `sfdx-project.json`.
 
 ## Other CI/CD Platforms
 
-The bash scripts in `scripts/bash` could work on other CI/CD platforms as long as the container sets these environment variables to match the GitLab predefined CI/CD variables.
+Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if environment variables match GitLab's predefined CI/CD variables.
