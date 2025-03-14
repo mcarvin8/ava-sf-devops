@@ -129,3 +129,20 @@ For Einstein Bots, update:
 ## Other CI/CD Platforms
 
 Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if environment variables match GitLab's predefined CI/CD variables.
+
+Set these environment variables appropriately:
+
+### Pre-defined GitLab CI/CD variables
+- `$CI_PIPELINE_SOURCE` = should be "push" to deploy and some other value to validate
+- `CI_ENVIRONMENT_NAME` = Salesforce org name. Scripts assume "prd" is production.
+- `$CI_JOB_STAGE` = `validate`, `destroy`, or `deploy`.
+- `$CI_JOB_STATUS` = `success` or `failure`.
+- `$GITLAB_USER_NAME` = user name who triggered pipeline.
+- `CI_JOB_URL` = URL for the CI/CD job log
+
+### Custom CI/CD variables
+- `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate.
+- `$DEPLOY_TIMEOUT` = Salesforce CLI wait time.
+- `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`.
+- `$DESTRUCTIVE_PACKAGE` = path to `destructive/package.xml`.
+- `$COMMIT_MSG` = commit message containing package list format. Uses GitLab pre-defined variables depending on if validation or deployment.
