@@ -128,9 +128,7 @@ For Einstein Bots, update:
 
 ## Other CI/CD Platforms
 
-Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if environment variables match GitLab's predefined CI/CD variables.
-
-Set these environment variables appropriately:
+Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if environment variables are configured as such to align with GitLab pre-defined variables or custom ones.
 
 ### Pre-defined GitLab CI/CD variables
 - `$CI_PIPELINE_SOURCE` = should be "push" to deploy and some other value to validate
