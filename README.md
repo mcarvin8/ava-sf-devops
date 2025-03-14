@@ -69,6 +69,8 @@ Version: 60.0
 
 This is combined with the `sfdx-git-delta` package using the `sf-package-combiner` plugin.
 
+By default, the `<version>` is intentionally omitted from the combined package to default to other source API version inputs. To add `<version>` to the combined package, include `Version: 60.0` (substituting the version number) on a newline in the package list (in between the Package tags) you include in the commit message.
+
 **Repo Recommendations**
 - Update your GitLab repo settings to provide the tags in the default merge request description.
 
