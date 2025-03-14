@@ -44,6 +44,7 @@ __pycache__/
 
 # Manifest folder
 manifest/
+package.xml
 
 # sfdx git delta plugin default directories
 package/
