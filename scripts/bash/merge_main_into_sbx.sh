@@ -21,8 +21,8 @@ function accept_incoming_changes_merge() {
 # Configure bot user name and bot user email address for this project access token
 # Bot Email Address template: project_{project_id}_bot_{random_string}@noreply.{Gitlab.config.gitlab.host}
 git fetch -q
-git config user.name "${BOT_NAME}"
-git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+git config user.name "${PAT_NAME}"
+git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
 
 # Update the sandbox branches with changes from production
 for branch_name in fullqa develop
@@ -33,7 +33,7 @@ do
     git merge --no-ff origin/main || true
     accept_incoming_changes_merge "$branch_name"
     # Push changes to remote, skipping CI pipeline
-    git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" -o ci.skip
+    git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" -o ci.skip
 done
 
 # Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
