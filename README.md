@@ -55,7 +55,7 @@ This model uses a manifest file (`package.xml`) to run incremental deployments. 
 
 ### Validations and Deployment Packages
 
-Additional metadata can be declared in merge request descriptions or commit messages using the following format:
+Additional metadata can be declared in merge request descriptions or commit messages using the following **package list** format. The opening and closing `<Package>` tags must be included.
 
 ```
 <Package>
@@ -65,14 +65,14 @@ Version: 60.0
 </Package>
 ```
 
-> `scripts/bash/convert_package_to_list.sh` can be used to convert an existing package.xml, such as one created in Workbench, into the accepted list format.
+> `scripts/bash/convert_package_to_list.sh {PATH_TO_PACKAGE}` can be used to convert an existing package.xml, such as one created in Workbench, into the accepted list format.
 
 This is combined with the `sfdx-git-delta` package using the `sf-package-combiner` plugin.
 
-By default, the `<version>` is intentionally omitted from the combined package to default to other source API version inputs. To add `<version>` to the combined package, include `Version: 60.0` (substituting the version number) on a newline in the package list (in between the Package tags) you include in the commit message.
+By default, the `<version>` is intentionally omitted from the combined package to default to other source API version inputs. To add `<version>` to the combined package, include `Version: 60.0` (substituting the version number) on a newline in the package list you include in the MR description/commit message.
 
 **Repo Recommendations**
-- Update your GitLab repo settings to provide the tags in the default merge request description.
+- Update your GitLab repo settings to provide the manadatory package list tags in the default merge request description.
 
 ![Default Merge Request Description](.gitlab/images/default-merge-request-description.png)
 
