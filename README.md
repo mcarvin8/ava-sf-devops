@@ -29,7 +29,7 @@ These CI/CD variables should be configured in the repo with the token attributes
 
 ### 2. Test Stage
 This stage ensures that metadata changes are properly validated and tested.
-   - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org.
+   - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org. Each org has its own validate job.
    - **Unit Testing**: A [scheduled pipeline](https://docs.gitlab.com/ci/pipelines/schedules/) with `$JOB_NAME` set to "unitTest" runs all local tests in the target org.
      - Requires `$AUTH_URL` and `$AUTH_ALIAS` variables.
    - **Code Coverage**: The `apex-code-coverage-transformer` creates JaCoCo-formatted reports, which can be visualized in GitLab v17.
@@ -41,12 +41,13 @@ This stage runs SonarQube scans (if applicable) after all test jobs.
 
 ### 4. Destroy Stage
 Handles the deletion of metadata from the Salesforce org when files are deleted from the branch.
+   - Each org has its own destroy job.
    - Jobs are allowed to fail if no metadata types are detected.
    - Destructive deployments are run before constructive deployments by default.
    - If destructive changes need to be deployed after constructive ones, cancel the `destroy` stage, allow `deploy` to complete, then re-run `destroy`.
 
 ### 5. Deploy Stage
-Deploys constructive metadata changes to the target org.
+Deploys constructive metadata changes to the target org. Each org has its own deploy job.
 
 ## Declare Metadata to Deploy
 
