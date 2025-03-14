@@ -142,13 +142,15 @@ Set these environment variables appropriately:
 - `$CI_PROJECT_URL` = base URL for source control repo (Slack post only)
 
 ### Custom CI/CD variables
-- `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate.
-- `$DEPLOY_TIMEOUT` = Salesforce CLI wait time.
-- `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`.
+- `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate
+- `$DEPLOY_TIMEOUT` = Salesforce CLI wait time in seconds for retrievals and deployments
+- `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`
 - `$DESTRUCTIVE_PACKAGE` = path to `package.xml` required for destructive deployments (same folder as `destructiveChanges.xml`)
-- `$DESTRUCTIVE_TESTS` = pre-defined Apex tests to run when destroying Apex in production. Separate multiple tests by a single space.
-- `$COMMIT_MSG` = commit message containing package list format. Uses GitLab pre-defined variables depending on if validation or deployment.
-- `$BEFORE_SHA` = `--from` SHA to use with `sfdx-git-delta`. Uses 2 pre-defined GitLab CI/CD variables depending on if validation or deployment.
+- `$DESTRUCTIVE_TESTS` = pre-defined Apex tests to run when destroying Apex in production (separate multiple tests by a single space)
+- `$COMMIT_MSG` = commit message containing package list format
+    - Uses GitLab pre-defined variables depending on if validation or deployment
+- `$BEFORE_SHA` = `--from` SHA to use with `sfdx-git-delta`
+    - Uses 2 pre-defined GitLab CI/CD variables depending on if validation or deployment
 - `$AUTH_ALIAS` = each org needs a unique authorization alias
 - `$AUTH_URL` = each org needs a unique SFDX Force Auth URL
 - `$SLACK_WEBHOOK_URL` = webhook for Slack integration
