@@ -17,13 +17,6 @@ function accept_incoming_changes_merge() {
     fi
 }
 
-# Must fetch before checking out fullqa and develop branches
-# Configure bot user name and bot user email address for this project access token
-# Bot Email Address template: project_{project_id}_bot_{random_string}@noreply.{Gitlab.config.gitlab.host}
-git fetch -q
-git config user.name "${PAT_NAME}"
-git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
-
 # Update the sandbox branches with changes from production
 for branch_name in fullqa develop
 do
