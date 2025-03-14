@@ -21,11 +21,11 @@ This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`
   - [Validation and Deployment Tests](#validation-and-deployment-tests)
   - [Destructive Apex Tests](#destructive-apex-tests)
 - [Connected Apps](#connected-apps)
+- [Bot Deployments](#bot-deployments)
 - [Slack Integration](#slack-integration)
 - [Branch Protection](#branch-protection)
   - [Validation Merge Request Pipelines](#validation-merge-request-pipelines)
   - [Protected CI/CD Environments](#protected-cicd-environments)
-- [Bot Deployments](#bot-deployments)
 - [Other CI/CD Platforms](#other-cicd-platforms)
   - [Pre-defined GitLab CI/CD Variables](#pre-defined-gitlab-cicd-variables)
   - [Custom CI/CD Variables](#custom-cicd-variables)
@@ -135,6 +135,14 @@ To destroy Apex in production, you must run Apex tests in the destructive deploy
 ## Connected Apps
 If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
 
+## Bot Deployments
+For Einstein Bots, update:
+- `.forceignore` to exclude bot versions not to deploy.
+- `scripts/replacementFiles` to configure the Bot User per org.
+- `sfdx-project.json` to run the right `replacements` per environment variables
+
+> If not using this feature, remove `replacements` from `sfdx-project.json`.
+
 ## Slack Integration
 Deployment, test, and destruction statuses can be posted to a Slack channel.
 Update the webhook URL in `.gitlab-ci.yml`:
@@ -149,14 +157,6 @@ Enable "Pipelines must succeed" in GitLab's Merge Request settings to enforce va
 
 ### Protected CI/CD Environments
 Protect environments to restrict who can deploy changes. Validation environments (`validate-*`) can be left open, while destructive and deploy environments should be restricted.
-
-## Bot Deployments
-For Einstein Bots, update:
-- `.forceignore` to exclude bot versions not to deploy.
-- `scripts/replacementFiles` to configure the Bot User per org.
-- `sfdx-project.json` to run the right `replacements` per environment variables
-
-> If not using this feature, remove `replacements` from `sfdx-project.json`.
 
 ## Other CI/CD Platforms
 
