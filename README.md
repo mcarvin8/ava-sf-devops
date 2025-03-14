@@ -21,7 +21,7 @@ This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`
   - [Validation and Deployment Apex Tests](#validation-and-deployment-apex-tests)
   - [Destructive Apex Tests](#destructive-apex-tests)
 - [Connected Apps](#connected-apps)
-- [Bot Deployments](#bot-deployments)
+- [Einstein Bots](#einstein-bots)
 - [Slack Integration](#slack-integration)
 - [Branch Protection](#branch-protection)
   - [Validation Merge Request Pipelines](#validation-merge-request-pipelines)
@@ -135,7 +135,7 @@ To destroy Apex in production, you must run Apex tests in the destructive deploy
 ## Connected Apps
 If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
 
-## Bot Deployments
+## Einstein Bots
 To deploy Einstein Bots with this model:
 - update `.forceignore` to add bot versions to **not** deploy/retrieve
 - modify files in `scripts/replacementFiles` to configure the running bot user for each org
