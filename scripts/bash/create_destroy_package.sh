@@ -8,7 +8,7 @@ set -e
 mkdir -p "destructiveChanges"
 
 # Salesforce package.xml header
-cat <<EOF > "$DEPLOY_PACKAGE"
+cat <<EOF > "$DESTRUCTIVE_CHANGES_PACKAGE"
 <?xml version="1.0" encoding="UTF-8" ?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
 EOF
@@ -41,23 +41,23 @@ while IFS=':' read -r metadata_name members; do
     members=$(echo "$members" | tr ',' ' ' | xargs)
 
     # Add metadata types to package.xml
-    echo "    <types>" >> "$DEPLOY_PACKAGE"
+    echo "    <types>" >> "$DESTRUCTIVE_CHANGES_PACKAGE"
 
     # Split and add each member
     for member in $members; do
-        echo "        <members>$member</members>" >> "$DEPLOY_PACKAGE"
+        echo "        <members>$member</members>" >> "$DESTRUCTIVE_CHANGES_PACKAGE"
     done
 
     # Add metadata name
-    echo "        <name>$metadata_name</name>" >> "$DEPLOY_PACKAGE"
-    echo "    </types>" >> "$DEPLOY_PACKAGE"
+    echo "        <name>$metadata_name</name>" >> "$DESTRUCTIVE_CHANGES_PACKAGE"
+    echo "    </types>" >> "$DESTRUCTIVE_CHANGES_PACKAGE"
 done <<< "$normalized_input"
 
 # Add closing tags
-cat <<EOF >> "$DEPLOY_PACKAGE"
+cat <<EOF >> "$DESTRUCTIVE_CHANGES_PACKAGE"
 </Package>
 EOF
 
-echo "Destructive Package created in $DEPLOY_PACKAGE."
+echo "Destructive Package created in $DESTRUCTIVE_CHANGES_PACKAGE."
 # need an empty package.xml for destructive deployments
 sf sfpc combine -c "$DESTRUCTIVE_PACKAGE" -n
