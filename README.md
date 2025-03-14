@@ -147,3 +147,4 @@ Set these environment variables appropriately:
 - `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`.
 - `$DESTRUCTIVE_PACKAGE` = path to `package.xml` required for destructive deployments (same folder as `destructiveChanges.xml`)
 - `$COMMIT_MSG` = commit message containing package list format. Uses GitLab pre-defined variables depending on if validation or deployment.
+- `$BEFORE_SHA` = `--from` SHA to use with `sfdx-git-delta`. Uses 2 pre-defined GitLab CI/CD variables depending on if validation or deployment.
