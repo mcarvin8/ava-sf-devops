@@ -132,10 +132,10 @@ Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if envir
 
 ### Pre-defined GitLab CI/CD variables
 - `$CI_PIPELINE_SOURCE` = should be "push" to deploy and some other value to validate
-- `$CI_ENVIRONMENT_NAME` = Salesforce org name. Scripts assume "prd" is production.
-- `$CI_JOB_STAGE` = `test`, `destroy`, or `deploy`.
-- `$CI_JOB_STATUS` = `success` or `failure`. (Slack post only)
-- `$GITLAB_USER_NAME` = user name who triggered pipeline. (Slack post only)
+- `$CI_ENVIRONMENT_NAME` = Salesforce org name (scripts assume "prd" is production)
+- `$CI_JOB_STAGE` = `test`, `destroy`, or `deploy`
+- `$CI_JOB_STATUS` = `success` or `failure` (Slack post only)
+- `$GITLAB_USER_NAME` = user name who triggered pipeline (Slack post only)
 - `$CI_JOB_URL` = URL for the CI/CD job log (Slack post only)
 - `$CI_PROJECT_URL` = base URL for source control repo (Slack post only)
 
