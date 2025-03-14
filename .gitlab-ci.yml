@@ -34,7 +34,6 @@ variables:
     - echo y | sf plugins install apextestlist@latest
     - echo y | sf plugins install sf-package-combiner@latest
     - sf version --verbose --json
-    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
 
 ####################################################
@@ -206,6 +205,7 @@ quality:
       - .sfdx/
   script:
     - echo y | sf plugins install apex-code-coverage-transformer@latest
+    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/convert_package_to_list.sh
     - source ./scripts/bash/package_check.sh
@@ -223,8 +223,9 @@ quality:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
-    - source ./scripts/bash/package_check.sh
+    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
+    - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/convert_package_to_list.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
@@ -241,6 +242,7 @@ quality:
   variables:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
+    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
