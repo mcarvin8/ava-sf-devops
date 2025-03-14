@@ -145,5 +145,5 @@ Set these environment variables appropriately:
 - `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate.
 - `$DEPLOY_TIMEOUT` = Salesforce CLI wait time.
 - `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`.
-- `$DESTRUCTIVE_PACKAGE` = path to `destructive/package.xml`.
+- `$DESTRUCTIVE_PACKAGE` = path to `package.xml` required for destructive deployments (same folder as `destructiveChanges.xml`)
 - `$COMMIT_MSG` = commit message containing package list format. Uses GitLab pre-defined variables depending on if validation or deployment.
