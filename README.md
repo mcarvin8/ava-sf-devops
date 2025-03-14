@@ -134,11 +134,12 @@ Set these environment variables appropriately:
 
 ### Pre-defined GitLab CI/CD variables
 - `$CI_PIPELINE_SOURCE` = should be "push" to deploy and some other value to validate
-- `CI_ENVIRONMENT_NAME` = Salesforce org name. Scripts assume "prd" is production.
+- `$CI_ENVIRONMENT_NAME` = Salesforce org name. Scripts assume "prd" is production.
 - `$CI_JOB_STAGE` = `validate`, `destroy`, or `deploy`.
-- `$CI_JOB_STATUS` = `success` or `failure`.
-- `$GITLAB_USER_NAME` = user name who triggered pipeline.
-- `CI_JOB_URL` = URL for the CI/CD job log
+- `$CI_JOB_STATUS` = `success` or `failure`. (Slack post only)
+- `$GITLAB_USER_NAME` = user name who triggered pipeline. (Slack post only)
+- `$CI_JOB_URL` = URL for the CI/CD job log (Slack post only)
+- `$CI_PROJECT_URL` = base URL for source control repo (Slack post only)
 
 ### Custom CI/CD variables
 - `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate.
