@@ -149,3 +149,5 @@ Set these environment variables appropriately:
 - `$DESTRUCTIVE_TESTS` = pre-defined Apex tests to run when destroying Apex in production. Separate multiple tests by a single space.
 - `$COMMIT_MSG` = commit message containing package list format. Uses GitLab pre-defined variables depending on if validation or deployment.
 - `$BEFORE_SHA` = `--from` SHA to use with `sfdx-git-delta`. Uses 2 pre-defined GitLab CI/CD variables depending on if validation or deployment.
+- `$AUTH_ALIAS` = each org needs a unique authorization alias
+- `$AUTH_URL` = each org needs a unique SFDX Force Auth URL
