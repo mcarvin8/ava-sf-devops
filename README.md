@@ -136,10 +136,10 @@ To destroy Apex in production, you must run Apex tests in the destructive deploy
 If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
 
 ## Bot Deployments
-For Einstein Bots, update:
-- `.forceignore` to exclude bot versions not to deploy.
-- `scripts/replacementFiles` to configure the Bot User per org.
-- `sfdx-project.json` to run the right `replacements` per environment variables
+To deploy Einstein Bots with this model:
+- update `.forceignore` to add bot versions to **not** deploy/retrieve
+- modify files in `scripts/replacementFiles` to configure the running bot user for each org
+- modify `sfdx-project.json` to run the right string `replacements` for each org
 
 > If not using this feature, remove `replacements` from `sfdx-project.json`.
 
