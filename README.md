@@ -151,3 +151,4 @@ Set these environment variables appropriately:
 - `$BEFORE_SHA` = `--from` SHA to use with `sfdx-git-delta`. Uses 2 pre-defined GitLab CI/CD variables depending on if validation or deployment.
 - `$AUTH_ALIAS` = each org needs a unique authorization alias
 - `$AUTH_URL` = each org needs a unique SFDX Force Auth URL
+- `$SLACK_WEBHOOK_URL` = webhook for Slack integration
