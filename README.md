@@ -2,16 +2,11 @@
 
 This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`), Salesforce CLI plugins, and bash scripts to validate, deploy, or destroy metadata in a Salesforce org following the org development model, without using packages/scratch orgs.
 
-The model uses these Salesforce CLI plugins:
-1. [sfdx-git-delta](https://github.com/scolladon/sfdx-git-delta)
-2. [apex-tests-list](https://github.com/renatoliveira/apex-test-list)
-3. [apex-code-coverage-transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
-4. [sf-package-combiner](https://github.com/mcarvin8/sf-package-combiner)
-
 <!-- TABLE OF CONTENTS -->
 <details>
   <summary>Table of Contents</summary>
 
+- [Plugins](#plugins)
 - [CI/CD Model](#cicd-model)
 - [Pipeline Stages](#pipeline-stages)
   - [Optional Ad-Hoc Jobs](#optional-ad-hoc-jobs)
@@ -36,6 +31,14 @@ The model uses these Salesforce CLI plugins:
   - [Custom CI/CD Variables](#custom-cicd-variables)
 
 </details>
+
+## Plugins
+
+The model uses these Salesforce CLI plugins:
+1. [sfdx-git-delta](https://github.com/scolladon/sfdx-git-delta)
+2. [apex-tests-list](https://github.com/renatoliveira/apex-test-list)
+3. [apex-code-coverage-transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
+4. [sf-package-combiner](https://github.com/mcarvin8/sf-package-combiner)
 
 ## CI/CD Model
 
