@@ -128,7 +128,7 @@ The destroy jobs which run on pushes to git branches solely relies on the `sfdx-
 
 #### Destructive Packages - Web Pipeline
 
-The destroy jobs which run on web pipelines uses the similar package list format, excluding the Package tags. Provide the metadata to destroy in this format over multiple lines.
+The destroy jobs which run on web pipelines uses the similar package list format, excluding the Package tags. Provide the metadata to destroy in this format over multiple lines. The pipeline will convert the list format to a "destructiveChanges.xml" before deployment.
 
 ```
 MetadataType: Member1, Member2, Member3
