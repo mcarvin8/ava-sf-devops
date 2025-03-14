@@ -50,13 +50,13 @@ rollback:
   allow_failure: false
   before_script:
     - git fetch -q
-    - git config user.name "${BOT_NAME}"
-    - git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+    - git config user.name "${PAT_NAME}"
+    - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
     - git checkout -q $CI_COMMIT_BRANCH
     - git pull --ff -q
   script:
     - source ./scripts/bash/rollback.sh
-    - git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   after_script:
     - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
     - git branch -D $CI_COMMIT_BRANCH
