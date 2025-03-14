@@ -75,13 +75,14 @@ This stage runs SonarQube scans (if applicable) after all test jobs.
 Destroy metadata from the Salesforce org.
 
 The model provides 2 methods to destroy metadata:
-1. Deletion of metadata files from the git branch will trigger the destructive deploymeng
+1. Deletion of metadata files from the git branch will trigger the destructive deployment
    - Each org has its own destroy job.
    - Jobs are allowed to fail if no metadata types are detected.
    - Destructive deployments are run before constructive deployments by default.
    - If destructive changes need to be deployed after constructive ones, cancel the `destroy` stage, allow `deploy` to complete, then re-run `destroy`.
 2. Web-based pipeline using package list format
    - Create web pipeline with "$PACKAGE" variable containing metadata to destroy in list format. Select applicable org branch.
+   - Each org has its own destroy-web job.
 
 ### 5. Deploy Stage
 Deploys constructive metadata changes to the target org. Each org has its own deploy job.
