@@ -78,8 +78,6 @@ prodBackfill:
     - git fetch -q
     - git config user.name "${PAT_NAME}"
     - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
-    - git checkout -q $CI_COMMIT_BRANCH
-    - git pull --ff -q
   script:
     - source ./scripts/bash/merge_main_into_sbx.sh
   tags: 
