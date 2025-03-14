@@ -109,7 +109,7 @@ Update the webhook URL in `.gitlab-ci.yml`:
 ```yaml
 SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 ```
-To disable Slack notifications, remove this variable and the `scripts/bash/deploy_slack_status.sh` step.
+To disable Slack notifications, remove this variable, the `scripts/bash/deploy_slack_status.sh` step, and the `scripts/bash/post_test_result.sh` step.
 
 ## Branch Protection
 ### Validation Merge Request Pipelines
