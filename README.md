@@ -18,7 +18,7 @@ This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`
   - [Validations and Deployment Packages](#validations-and-deployment-packages)
   - [Destructive Packages](#destructive-packages)
 - [Declare Apex Tests](#declare-apex-tests)
-  - [Validation and Deployment Tests](#validation-and-deployment-tests)
+  - [Validation and Deployment Apex Tests](#validation-and-deployment-apex-tests)
   - [Destructive Apex Tests](#destructive-apex-tests)
 - [Connected Apps](#connected-apps)
 - [Bot Deployments](#bot-deployments)
@@ -120,7 +120,7 @@ The destroy job solely relies on the `sfdx-git-delta` destructive package.
 
 Apex tests are required for deployments and destructive changes containing Apex classes/triggers.
 
-### Validation and Deployment Tests
+### Validation and Deployment Apex Tests
 
 The `apex-tests-list` plugin will determine the specified tests to run when validating and deploying.
 
