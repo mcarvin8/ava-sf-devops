@@ -23,9 +23,9 @@ These jobs require a GitLab project access token to perform git operations. The 
 
 These CI/CD variables should be configured in the repo with the token attributes:
 
-- `BOT_NAME` should be the name of the project access token user
-- `BOT_USER_NAME` should be the user name of the project access token user
-- `PROJECT_TOKEN`  should contain the project access token value
+- `PAT_NAME` should be the name of the project access token user
+- `PAT_USER_NAME` should be the user name of the project access token user
+- `PAT_VALUE` should contain the project access token value
 
 ### 2. Test Stage
 This stage ensures that metadata changes are properly validated and tested.
