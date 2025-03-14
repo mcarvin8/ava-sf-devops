@@ -135,6 +135,7 @@ MetadataType: Member1, Member2, Member3
 MetadataType2: Member1, Member2, Member3
 ```
 
+When creating the web pipeline, the package list contents should be the value for the `$PACKAGE` variable you create when starting the pipeline.
 ## Declare Apex Tests
 
 Apex tests are required for deployments and destructive changes containing Apex classes/triggers.
