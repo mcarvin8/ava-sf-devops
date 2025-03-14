@@ -6,7 +6,7 @@ function print_slack_summary_build() {
     local pipeline_description
     local environment_name="${CI_ENVIRONMENT_NAME}"
 
-    if [[ "${CI_JOB_STAGE}" == "validate" ]]; then
+    if [[ "${CI_JOB_STAGE}" == "test" ]]; then
         # remove "validate-" in environment name
         environment_name="${environment_name/validate-/}"
         pipeline_description="Validation against ${environment_name}"
