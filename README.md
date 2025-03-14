@@ -80,9 +80,11 @@ The model provides 2 methods to destroy metadata:
    - Jobs are allowed to fail if no metadata types are detected.
    - Destructive deployments are run before constructive deployments by default.
    - If destructive changes need to be deployed after constructive ones, cancel the `destroy` stage, allow `deploy` to complete, then re-run `destroy`.
+   - **Downside**: Since GitLab has no built in rules to only run CI/CD jobs when files are deleted, this job will run in all pipelines.
 2. Web-based pipeline using package list format
    - Create web pipeline with "$PACKAGE" variable containing metadata to destroy in list format. Select applicable org branch.
    - Each org has its own destroy-web job.
+   - Allows isolated, controlled destructions versus method 1.
 
 ### 5. Deploy Stage
 Deploys constructive metadata changes to the target org. Each org has its own deploy job.
