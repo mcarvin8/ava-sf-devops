@@ -8,6 +8,35 @@ The model uses these Salesforce CLI plugins:
 3. [apex-code-coverage-transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
 4. [sf-package-combiner](https://github.com/mcarvin8/sf-package-combiner)
 
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+
+- [CI/CD Model](#cicd-model)
+- [Pipeline Stages](#pipeline-stages)
+  - [Optional Ad-Hoc Jobs](#optional-ad-hoc-jobs)
+  - [Test Stage](#test-stage)
+  - [Quality Stage](#quality-stage)
+  - [Destroy Stage](#destroy-stage)
+  - [Deploy Stage](#deploy-stage)
+- [Declare Metadata to Deploy](#declare-metadata-to-deploy)
+  - [Validations and Deployment Packages](#validations-and-deployment-packages)
+  - [Destructive Packages](#destructive-packages)
+- [Declare Apex Tests](#declare-apex-tests)
+  - [Validation and Deployment Tests](#validation-and-deployment-tests)
+  - [Destructive Apex Tests](#destructive-apex-tests)
+- [Connected Apps](#connected-apps)
+- [Slack Integration](#slack-integration)
+- [Branch Protection](#branch-protection)
+  - [Validation Merge Request Pipelines](#validation-merge-request-pipelines)
+  - [Protected CI/CD Environments](#protected-cicd-environments)
+- [Bot Deployments](#bot-deployments)
+- [Other CI/CD Platforms](#other-cicd-platforms)
+  - [Pre-defined GitLab CI/CD Variables](#pre-defined-gitlab-cicd-variables)
+  - [Custom CI/CD Variables](#custom-cicd-variables)
+
+</details>
+
 ## CI/CD Model
 
 The CI/CD model in `.gitlab-ci.yml` follows the org branching model, where each Salesforce org has its own long-running Git branch. The rules in each org job can be customized based on your branching strategy (i.e. target sandbox orgs when a merge request is opened against the `main` branch and target production org when a merge request is accepted into the `main` branch or target all orgs via 1 branch).
