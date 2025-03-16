@@ -7,71 +7,34 @@ build_package_from_commit() {
     local output_file="$2"
     PACKAGE_FOUND="False"
     VERSION_FOUND="False"
+    PACKAGE_LIST="package-list.txt"
 
     # Extract <Package> content from the commit message
     package_content=$(echo "$commit_msg" | sed -n '/<Package>/,/<\/Package>/p' | sed '1d;$d') # Remove <Package> tags
 
     if [[ -n "$package_content" ]]; then
         echo "Found package content in the commit message."
+        echo "$package_content" > "$PACKAGE_LIST"
 
-        # Create package.xml header
-        cat <<EOF > "$output_file"
-<?xml version="1.0" encoding="UTF-8"?>
-<Package xmlns="http://soap.sforce.com/2006/04/metadata">
-EOF
+        # Convert package list to XML
+        sf sfpl xml -l "$PACKAGE_LIST" -x "$DEPLOY_PACKAGE"
 
-        # Process each line in the package content
-        while IFS= read -r line; do
-            # Skip empty or whitespace-only lines
-            if [[ -z "$(echo "$line" | xargs)" ]]; then
-                continue
+        # Extract version from package.xml
+        if [[ -f "$DEPLOY_PACKAGE" ]]; then
+            VERSION=$(grep -oPm1 "(?<=<version>)[0-9.]+" "$DEPLOY_PACKAGE")
+            if [[ -n "$VERSION" ]]; then
+                VERSION=${VERSION%%.*} # Convert float to integer
+                echo "Extracted version: $VERSION"
+                VERSION_FOUND="True"
+                export VERSION
             fi
-
-            # Check for version
-            if echo "$line" | grep -i "^Version:" >/dev/null; then
-                if [[ "$VERSION_FOUND" == "False" ]]; then
-                    version=$(echo "$line" | cut -d':' -f2 | xargs)
-                    version=${version%%.*} # Convert float to integer by truncating
-                    echo "Extracted version: $version"
-                    VERSION_FOUND="True"
-                    export VERSION="$version"
-                fi
-                continue
-            fi
-
-            # Extract metadata name and members
-            metadata_name=$(echo "$line" | cut -d':' -f1 | xargs)
-            members=$(echo "$line" | cut -d':' -f2- | xargs)
-
-            # Validate metadata_name and members
-            if [[ -z "$metadata_name" || -z "$members" ]]; then
-                echo "WARNING: Skipping invalid line: '$line'"
-                continue
-            fi
-
-            # Skip lines with wildcards in members
-            if echo "$members" | grep -q '\*'; then
-                echo "WARNING: Skipping line with wildcard: '$metadata_name'"
-                continue
-            fi
-
-            # Add metadata type and members to package.xml
-            echo "    <types>" >> "$output_file"
-            for member in $(echo "$members" | tr ',' '\n'); do
-                echo "        <members>$member</members>" >> "$output_file"
-            done
-            echo "        <name>$metadata_name</name>" >> "$output_file"
-            echo "    </types>" >> "$output_file"
-        done <<< "$package_content"
-
-        # Close the package.xml
-        cat <<EOF >> "$output_file"
-</Package>
-EOF
-
+        else
+            echo "ERROR: $DEPLOY_PACKAGE was not generated."
+            exit 1
+        fi
         PACKAGE_FOUND="True"
     else
-        echo "WARNING: Package content NOT found in the commit message."
+        echo "WARNING: Package contents NOT found in the commit message."
     fi
     export PACKAGE_FOUND
 }
@@ -79,8 +42,7 @@ EOF
 # Run the function
 build_package_from_commit "$COMMIT_MSG" "$DEPLOY_PACKAGE"
 
-# combine packages with plugin if provided in commit message
-# use developer provided API version if found, otherwise omit the API version to default to other source API version inputs
+# Combine packages with plugin if provided in commit message
 if [[ "$PACKAGE_FOUND" == "True" ]]; then
     echo "Combining package in commit message with automated diff package..."
     if [[ "$VERSION_FOUND" == "True" ]]; then
@@ -90,6 +52,5 @@ if [[ "$PACKAGE_FOUND" == "True" ]]; then
     fi
 else
     echo "Fully relying on automated diff package..."
-    # reparse delta package with combiner plugin to omit the API version to default to other source API version inputs
     sf sfpc combine -f "package/package.xml" -c "$DEPLOY_PACKAGE" -n
 fi
