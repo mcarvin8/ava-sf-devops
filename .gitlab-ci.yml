@@ -244,6 +244,7 @@ quality:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
+    - sf sfpl list -x "$DESTRUCTIVE_CHANGES_PACKAGE"
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
