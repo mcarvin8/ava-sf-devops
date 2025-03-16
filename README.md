@@ -39,6 +39,7 @@ The model uses these Salesforce CLI plugins:
 2. [apex-tests-list](https://github.com/renatoliveira/apex-test-list)
 3. [apex-code-coverage-transformer](https://github.com/mcarvin8/apex-code-coverage-transformer)
 4. [sf-package-combiner](https://github.com/mcarvin8/sf-package-combiner)
+5. [sf-package-list](https://github.com/mcarvin8/sf-package-list)
 
 ## CI/CD Model
 
@@ -105,7 +106,7 @@ Version: 60.0
 </Package>
 ```
 
-> `scripts/bash/convert_package_to_list.sh {PATH_TO_PACKAGE}` can be used to convert an existing package.xml, such as one created in Workbench, into the accepted list format.
+> Run `sf-package-list` to convert an existing `package.xml`, such as one created in Workbench, into the accepted list format.
 
 This is combined with the `sfdx-git-delta` package using the `sf-package-combiner` plugin.
 
@@ -128,7 +129,9 @@ The destroy jobs which run on pushes to git branches solely relies on the `sfdx-
 
 #### Destructive Packages - Web Pipeline
 
-The destroy jobs which run on web pipelines uses the similar package list format, excluding the Package tags. Provide the metadata to destroy in this format over multiple lines. The pipeline will convert the list format to a "destructiveChanges.xml" before deployment.
+The destroy jobs which run on web pipelines uses the similar package list format, excluding the Package tags. You can use the `sf-package-list` plugin to convert an existing `package.xml` into the accepted list format.
+
+Provide the metadata to destroy in this list format over multiple lines. The pipeline will convert the list format to a "destructiveChanges.xml" before deployment.
 
 ```
 MetadataType: Member1, Member2, Member3
