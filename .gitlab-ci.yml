@@ -50,6 +50,8 @@ rollback:
     - when: never
   allow_failure: false
   before_script:
+    - apt-get update
+    - apt-get install -y git
     - git fetch -q
     - git config user.name "${PAT_NAME}"
     - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
@@ -77,6 +79,8 @@ prodBackfill:
     - when: never
   allow_failure: true
   before_script:
+    - apt-get update
+    - apt-get install -y git
     - git fetch -q
     - git config user.name "${PAT_NAME}"
     - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
