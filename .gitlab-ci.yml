@@ -42,6 +42,7 @@ variables:
 # Only runs on web-based pipelines when $SHA variable is provided.
 ####################################################
 rollback:
+  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_PIPELINE_SOURCE == 'web' && $SHA
@@ -68,6 +69,7 @@ rollback:
 # Remove depending on your branching strategy.
 ####################################################
 prodBackfill:
+  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
