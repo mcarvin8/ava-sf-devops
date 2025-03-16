@@ -33,6 +33,7 @@ variables:
     - echo y | sf plugins install sfdx-git-delta@latest
     - echo y | sf plugins install apextestlist@latest
     - echo y | sf plugins install sf-package-combiner@latest
+    - echo y | sf plugins install sf-package-list@latest
     - sf version --verbose --json
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
 
@@ -208,7 +209,7 @@ quality:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
-    - source ./scripts/bash/convert_package_to_list.sh
+    - sf sfpl list -x "$DEPLOY_PACKAGE"
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -226,7 +227,7 @@ quality:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
-    - source ./scripts/bash/convert_package_to_list.sh
+    - sf sfpl list -x "$DEPLOY_PACKAGE"
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
