@@ -244,7 +244,7 @@ quality:
 ####################################################
 # Destroy metadata in a Salesforce org using a web pipeline.
 ####################################################
-destroy-metadata-web:
+.destroy-metadata-web:
   extends: .salesforce-container
   stage: destroy
   variables:
@@ -283,8 +283,6 @@ deploy:dev:
   stage: deploy
   resource_group: dev
   rules:
-    - if: $SANDBOX_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == 'dev' && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: false
@@ -302,9 +300,24 @@ destroy:dev:
   stage: destroy
   resource_group: dev
   rules:
-    - if: $SANDBOX_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == 'dev' && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:dev-web:
+  extends: .destroy-metadata-web
+  stage: destroy
+  resource_group: dev
+  rules:
+    - if: $CI_COMMIT_REF_NAME == 'dev' && $CI_PIPELINE_SOURCE == 'web' && $PACKAGE
       when: always
   allow_failure: true
   variables:
@@ -343,8 +356,6 @@ deploy:fqa:
   stage: deploy
   resource_group: fqa
   rules:
-    - if: $FQA_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == 'fqa' && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: false
@@ -362,8 +373,6 @@ destroy:fqa:
   stage: destroy
   resource_group: fqa
   rules:
-    - if: $FQA_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == 'fqa' && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: true
@@ -373,6 +382,23 @@ destroy:fqa:
   environment:
     name: fqa
     url: https://avalara--fqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:fqa-web:
+  extends: .destroy-metadata-web
+  stage: destroy
+  resource_group: fqa
+  rules:
+    - if: $CI_COMMIT_REF_NAME == 'fqa' && $CI_PIPELINE_SOURCE == 'web' && $PACKAGE
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: FQA
+    AUTH_URL: $FQA_AUTH_URL
+  environment:
+    name: sandbox
+    url: fqa://avalara--fqa.sandbox.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
@@ -403,8 +429,6 @@ deploy:prd:
   stage: deploy
   resource_group: prd
   rules:
-    - if: $PRD_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: false
@@ -422,8 +446,6 @@ destroy:prd:
   stage: destroy
   resource_group: prd
   rules:
-    - if: $PRD_DISABLED
-      when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: true
@@ -433,5 +455,22 @@ destroy:prd:
   environment:
     name: prd
     url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:prd-web:
+  extends: .destroy-metadata-web
+  stage: destroy
+  resource_group: prd
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'web' && $PACKAGE
+      when: always
+  allow_failure: true
+  variables:
+    AUTH_ALIAS: PRD
+    AUTH_URL: $PRD_AUTH_URL
+  environment:
+    name: prd
+    url: fqa://avalara.salesforce.com
   tags: 
     - aws,prd,us-west-2
