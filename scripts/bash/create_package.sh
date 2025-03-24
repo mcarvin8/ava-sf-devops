@@ -7,7 +7,7 @@ build_package_from_commit() {
     local output_file="$2"
     PACKAGE_FOUND="False"
     VERSION_FOUND="False"
-    PACKAGE_LIST="package-list.txt"
+    PACKAGE_LIST="package.txt"
 
     # Extract <Package> content from the commit message
     package_content=$(echo "$commit_msg" | sed -n '/<Package>/,/<\/Package>/p' | sed '1d;$d') # Remove <Package> tags

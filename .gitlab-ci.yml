@@ -33,8 +33,8 @@ variables:
     - echo y | sf plugins install sfdx-git-delta@latest
     - echo y | sf plugins install apextestlist@latest
     - echo y | sf plugins install sf-package-combiner@latest
-    - echo y | sf plugins install sf-package-list@latest
     - sf version --verbose --json
+    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
 
 ####################################################
@@ -42,7 +42,6 @@ variables:
 # Only runs on web-based pipelines when $SHA variable is provided.
 ####################################################
 rollback:
-  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_PIPELINE_SOURCE == 'web' && $SHA
@@ -50,16 +49,14 @@ rollback:
     - when: never
   allow_failure: false
   before_script:
-    - apt-get update
-    - apt-get install -y git
     - git fetch -q
-    - git config user.name "${PAT_NAME}"
-    - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+    - git config user.name "${BOT_NAME}"
+    - git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
     - git checkout -q $CI_COMMIT_BRANCH
     - git pull --ff -q
   script:
     - source ./scripts/bash/rollback.sh
-    - git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git push "https://${BOT_NAME}:${PROJECT_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
   after_script:
     - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
     - git branch -D $CI_COMMIT_BRANCH
@@ -71,19 +68,12 @@ rollback:
 # Remove depending on your branching strategy.
 ####################################################
 prodBackfill:
-  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
       when: always
     - when: never
   allow_failure: true
-  before_script:
-    - apt-get update
-    - apt-get install -y git
-    - git fetch -q
-    - git config user.name "${PAT_NAME}"
-    - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
   script:
     - source ./scripts/bash/merge_main_into_sbx.sh
   tags: 
@@ -212,10 +202,9 @@ quality:
       - .sfdx/
   script:
     - echo y | sf plugins install apex-code-coverage-transformer@latest
-    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
+    - source ./scripts/bash/convert_package_to_list.sh
     - source ./scripts/bash/package_check.sh
-    - sf sfpl list -x "$DEPLOY_PACKAGE"
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -230,10 +219,9 @@ quality:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
-    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
-    - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
-    - sf sfpl list -x "$DEPLOY_PACKAGE"
+    - source ./scripts/bash/create_package.sh
+    - source ./scripts/bash/convert_package_to_list.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -249,16 +237,21 @@ quality:
   variables:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
-    - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
-    - sf sfpl list -x "$DESTRUCTIVE_CHANGES_PACKAGE"
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
 
-.destroy-metadata-web:
+####################################################
+# Destroy metadata in a Salesforce org using a web pipeline.
+####################################################
+destroy-metadata-web:
   extends: .salesforce-container
+  stage: destroy
+  variables:
+    DEPLOY_PACKAGE: "destructive/destructiveChanges.xml"
+    DESTRUCTIVE_PACKAGE: "destructive/package.xml"
   script:
-    - source ./scripts/bash/create_destroy_package.sh
+    - source ./scripts/bash/create_destroy_package.sh;
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -312,25 +305,6 @@ destroy:dev:
     - if: $SANDBOX_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == 'dev' && $CI_PIPELINE_SOURCE == 'push'
-      when: always
-  allow_failure: true
-  variables:
-    AUTH_ALIAS: SANDBOX
-    AUTH_URL: $SANDBOX_AUTH_URL
-  environment:
-    name: sandbox
-    url: https://avalara--dev.sandbox.my.salesforce.com
-  tags: 
-    - aws,prd,us-west-2
-
-destroy:dev-web:
-  extends: .destroy-metadata-web
-  stage: destroy
-  resource_group: dev
-  rules:
-    - if: $SANDBOX_DISABLED
-      when: never
-    - if: $PACKAGE && $CI_COMMIT_REF_NAME == 'dev' && $CI_PIPELINE_SOURCE == 'web'
       when: always
   allow_failure: true
   variables:
@@ -402,25 +376,6 @@ destroy:fqa:
   tags: 
     - aws,prd,us-west-2
 
-destroy:fqa-web:
-  extends: .destroy-metadata-web
-  stage: destroy
-  resource_group: fqa
-  rules:
-    - if: $FQA_DISABLED
-      when: never
-    - if: $PACKAGE && $CI_COMMIT_REF_NAME == 'fqa' && $CI_PIPELINE_SOURCE == 'web'
-      when: always
-  allow_failure: true
-  variables:
-    AUTH_ALIAS: FQA
-    AUTH_URL: $FQA_AUTH_URL
-  environment:
-    name: fqa
-    url: https://avalara--fqa.sandbox.my.salesforce.com
-  tags: 
-    - aws,prd,us-west-2
-
 ####################################################
 # Declare jobs for the production org.
 ####################################################
@@ -470,25 +425,6 @@ destroy:prd:
     - if: $PRD_DISABLED
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
-      when: always
-  allow_failure: true
-  variables:
-    AUTH_ALIAS: PRD
-    AUTH_URL: $PRD_AUTH_URL
-  environment:
-    name: prd
-    url: https://avalara.my.salesforce.com
-  tags: 
-    - aws,prd,us-west-2
-
-destroy:prd-web:
-  extends: .destroy-metadata-web
-  stage: destroy
-  resource_group: prd
-  rules:
-    - if: $PRD_DISABLED
-      when: never
-    - if: $PACKAGE && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'web'
       when: always
   allow_failure: true
   variables:
