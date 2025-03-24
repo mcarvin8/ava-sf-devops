@@ -96,7 +96,7 @@ This model uses a manifest file (`package.xml`) to run incremental deployments. 
 
 ### Validations and Deployment Packages
 
-Additional metadata can be declared in merge request descriptions or commit messages using the following **package list** format. The opening and closing `<Package>` tags must be included.
+Additional metadata can be declared in merge request descriptions or commit messages using the following **[sf-package-list](https://github.com/mcarvin8/sf-package-list)** format. The opening and closing `<Package>` tags must be included.
 
 ```
 <Package>
@@ -105,8 +105,6 @@ MetadataType2: Member1, Member2, Member3
 Version: 60.0
 </Package>
 ```
-
-> Run `sf-package-list` to convert an existing `package.xml`, such as one created in Workbench, into the accepted list format.
 
 This is combined with the `sfdx-git-delta` package using the `sf-package-combiner` plugin.
 
