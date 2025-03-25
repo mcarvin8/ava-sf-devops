@@ -2,11 +2,9 @@
 set -e
 
 # verify package has types to deploy
-if grep -q '<types>' $DEPLOY_PACKAGE ; then
-  echo "---- Deploying added and modified metadata ----"
-else
-  echo "---- No changes to deploy ----"
-  exit 1
+if ! grep -q '<types>' "$DEPLOY_PACKAGE" ; then
+    echo "ERROR: No Metadata captured, $DEPLOY_PACKAGE is empty"
+    exit 1
 fi
 
 # Check if a wildcard is in the package and fail if true to enforce incremental deployments
