@@ -9,6 +9,15 @@ else
   exit 1
 fi
 
+# Check if a wildcard is in the package and fail if true to enforce incremental deployments
+# sfdx-git-delta packages will never contain wildcards
+# wildcards can only be present in the developer provided package list
+if grep -iq "<members>\s*\*\s*</members>" "$DEPLOY_PACKAGE"; then
+    echo "ERROR: Wildcards are not allowed in the package.xml."
+    echo "Remove the wildcard from your manual package list and push a new commit."
+    exit 1
+fi
+
 # Check for Apex in the package and determine specified tests if true
 if grep -iq "<name>ApexClass</name>" "$DEPLOY_PACKAGE" || grep -iq "<name>ApexTrigger</name>" "$DEPLOY_PACKAGE"; then
     echo "Found ApexClass or ApexTrigger in $DEPLOY_PACKAGE, looking for specified tests for deployment..."
