@@ -49,3 +49,6 @@ package.xml
 # sfdx git delta plugin default directories
 package/
 destructiveChanges/
+
+# sf-package-list file
+package.txt
