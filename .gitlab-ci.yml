@@ -42,6 +42,7 @@ variables:
 # Only runs on web-based pipelines when $SHA variable is provided.
 ####################################################
 rollback:
+  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_PIPELINE_SOURCE == 'web' && $SHA
@@ -49,6 +50,8 @@ rollback:
     - when: never
   allow_failure: false
   before_script:
+    - apt-get update
+    - apt-get install -y git
     - git fetch -q
     - git config user.name "${BOT_NAME}"
     - git config user.email "${BOT_USER_NAME}@noreply.${CI_SERVER_HOST}"
@@ -68,6 +71,7 @@ rollback:
 # Remove depending on your branching strategy.
 ####################################################
 prodBackfill:
+  image: ubuntu:latest
   stage: pipeline
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
@@ -75,6 +79,8 @@ prodBackfill:
     - when: never
   allow_failure: true
   script:
+    - apt-get update
+    - apt-get install -y git
     - source ./scripts/bash/merge_main_into_sbx.sh
   tags: 
     - aws,prd,us-west-2
