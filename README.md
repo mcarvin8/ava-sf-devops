@@ -82,7 +82,7 @@ The model provides 2 methods to destroy metadata:
    - Destructive deployments are run before constructive deployments by default.
    - If destructive changes need to be deployed after constructive ones, cancel the `destroy` stage, allow `deploy` to complete, then re-run `destroy`.
    - **Downside**: Since GitLab has no built in rules to only run CI/CD jobs when files are deleted, this job will run in all pipelines.
-2. Web-based pipeline using package list format
+2. Web-based pipeline using [sf-package-list](https://github.com/mcarvin8/sf-package-list) format
    - Create web pipeline with "$PACKAGE" variable containing metadata to destroy in list format. Select applicable org branch.
    - Each org has its own destroy-web job.
    - Allows isolated, controlled destructions versus method 1.
@@ -139,9 +139,10 @@ MetadataType2: Member1, Member2, Member3
 ```
 
 When creating the web pipeline, the package list contents should be the value for the `$PACKAGE` variable you create when starting the pipeline.
-## Declare Apex Tests
 
-Apex tests are required for deployments and destructive changes containing Apex classes/triggers.
+## Declare Specified Apex Tests
+
+Apex tests are required for deployments and destructive changes containing Apex classes/triggers. This model runs specified tests rather than running all tests in an org.
 
 ### Validation and Deployment Apex Tests
 
@@ -156,9 +157,11 @@ To destroy Apex in production, you must run Apex tests in the destructive deploy
 > **Sandbox orgs do not require destructive tests.**
 
 ## Connected Apps
+
 If connected apps are detected in a package, their `<consumerKey>` line is automatically removed before deployment to avoid failures.
 
 ## Einstein Bots
+
 To deploy Einstein Bots with this model:
 - update `.forceignore` to add bot versions to **not** deploy/retrieve
 - modify files in `scripts/replacementFiles` to configure the running bot user for each org
@@ -167,6 +170,7 @@ To deploy Einstein Bots with this model:
 > If not using this feature, remove `replacements` from `sfdx-project.json`.
 
 ## Slack Integration
+
 Deployment, test, and destruction statuses can be posted to a Slack channel.
 Update the webhook URL in `.gitlab-ci.yml`:
 ```yaml
@@ -175,10 +179,13 @@ SLACK_WEBHOOK_URL: https://hooks.slack.com/services/
 To disable Slack notifications, remove this variable, the `scripts/bash/deploy_slack_status.sh` step, and the `scripts/bash/post_test_result.sh` step.
 
 ## Branch Protection
+
 ### Validation Merge Request Pipelines
+
 Enable "Pipelines must succeed" in GitLab's Merge Request settings to enforce validation before merging.
 
 ### Protected CI/CD Environments
+
 Protect environments to restrict who can deploy changes. Validation environments (`validate-*`) can be left open, while destructive and deploy environments should be restricted.
 
 ## Other CI/CD Platforms
@@ -186,6 +193,7 @@ Protect environments to restrict who can deploy changes. Validation environments
 Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if environment variables are configured as such to align with GitLab pre-defined variables or custom ones.
 
 ### Pre-defined GitLab CI/CD variables
+
 - `$CI_PIPELINE_SOURCE` = should be "push" to deploy and some other value to validate
 - `$CI_ENVIRONMENT_NAME` = Salesforce org name (scripts assume "prd" is production)
 - `$CI_JOB_STAGE` = `test`, `destroy`, or `deploy`
@@ -195,6 +203,7 @@ Bash scripts in `scripts/bash` can be adapted for other CI/CD platforms if envir
 - `$CI_PROJECT_URL` = base URL for source control repo (Slack post only)
 
 ### Custom CI/CD variables
+
 - `$DEPLOY_PACKAGE` = path to `package.xml` to deploy/validate
 - `$DEPLOY_TIMEOUT` = Salesforce CLI wait time in seconds for retrievals and deployments
 - `$DESTRUCTIVE_CHANGES_PACKAGE` = path to `destructiveChanges.xml`
