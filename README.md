@@ -111,11 +111,11 @@ This is combined with the `sfdx-git-delta` package using the `sf-package-combine
 By default, the `<version>` is intentionally omitted from the combined package to default to other source API version inputs. To add `<version>` to the combined package, include `Version: 60.0` (substituting the version number) on a newline in the package list you include in the MR description/commit message.
 
 **Repo Recommendations**
-- Update your GitLab repo settings to provide the manadatory package list tags in the default merge request description.
+- Update the default merge request description to include the manadatory package list tags.
 
 ![Default Merge Request Description](.gitlab/images/default-merge-request-description.png)
 
-- Update your GitLab repo settings to include the MR description automatically in the merge commit message. 
+- Update the merge commit message template to include the MR description. 
 
 ![Merge Commit Message Template](.gitlab/images/merge-commit-msg-template.png)
 
