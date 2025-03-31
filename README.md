@@ -115,7 +115,7 @@ By default, the `<version>` is intentionally omitted from the combined package t
 
 ![Default Merge Request Description](.gitlab/images/default-merge-request-description.png)
 
-- Update the merge commit message template to include the MR description. 
+- Update the merge commit message template to include the MR description (`%{description}`). 
 
 ![Merge Commit Message Template](.gitlab/images/merge-commit-msg-template.png)
 
