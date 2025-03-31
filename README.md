@@ -121,13 +121,15 @@ By default, the `<version>` is intentionally omitted from the combined package t
 
 ### Destructive Packages
 
+The packages for destructive pipelines differ based on the pipeline source.
+
 #### Destructive Packages - Push Pipeline
 
-The destroy jobs which run on pushes to git branches solely relies on the `sfdx-git-delta` destructive package.
+The destroy jobs which run on changes to git branches (i.e. push pipeline) solely relies on the `sfdx-git-delta` destructive packages.
 
 #### Destructive Packages - Web Pipeline
 
-The destroy jobs which run on web pipelines uses the similar package list format, excluding the Package tags. You can use the `sf-package-list` plugin to convert an existing `package.xml` into the accepted list format.
+The destroy jobs which run on web pipelines uses the **[sf-package-list](https://github.com/mcarvin8/sf-package-list)** format.
 
 Provide the metadata to destroy in this list format over multiple lines. The pipeline will convert the list format to a "destructiveChanges.xml" before deployment.
 
