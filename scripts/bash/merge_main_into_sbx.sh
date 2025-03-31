@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-# Push commits on `main` branch back to other branches
+# Push commits on `main` branch back to other org branches
 # Only needed if you create branches from `main` branch but have to merge them into other long-running branches.
 
 function accept_incoming_changes_merge() {
@@ -18,7 +18,7 @@ function accept_incoming_changes_merge() {
 }
 
 # Update the sandbox branches with changes from production
-for branch_name in fullqa develop
+for branch_name in fqa dev
 do
     git checkout -q $branch_name
     git pull --ff -q
