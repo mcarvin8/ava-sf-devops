@@ -16,3 +16,4 @@ git ls-files -u | cut -f2 | sort -u | while read -r file; do
 done
 
 git commit -m "Merge remote-tracking branch 'origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME' into $CI_MERGE_REQUEST_TARGET_BRANCH_NAME. Triggered by: $GITLAB_USER_NAME"
+git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"

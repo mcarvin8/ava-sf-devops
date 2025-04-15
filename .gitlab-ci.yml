@@ -286,7 +286,6 @@ quality:
   script:
     - source ./scripts/bash/auto_merge.sh
   after_script:
-    - git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
     - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
     - git branch -D $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
 
