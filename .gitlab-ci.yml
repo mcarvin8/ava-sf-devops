@@ -83,7 +83,15 @@ prodBackfill:
   script:
     - apt-get update
     - apt-get install -y git
+    - git fetch -q
+    - git config user.name "${MAINTAINER_PAT_NAME}"
+    - git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
     - source ./scripts/bash/merge_main_into_sbx.sh
+  after_script:
+    # Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
+    - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
+    - git branch -D fqa
+    - git branch -D dev
   tags: 
     - aws,prd,us-west-2
 
