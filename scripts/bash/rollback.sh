@@ -1,20 +1,14 @@
 #!/bin/bash
 set -e
 
-function resolve_conflicts() {
-    # check if there are any revert conflicts
-    if [[ $(git status | grep "Unmerged paths:") ]]; then
-        echo "Revert conflicts detected. Resolving automatically by accepting all current changes on the below files:"
-        
-        # loop through all files with revert conflicts and accept current branch changes (ours)
-        while IFS= read -r -d '' file; do
-            echo "$file"
-            git checkout --ours "$file"
-            git add "$file"
-        done < <(git diff --name-only --diff-filter=U -z)
+function check_commit_age() {
+    COMMIT_TIMESTAMP=$(git show -s --format=%ct "$SHA")
+    CURRENT_TIMESTAMP=$(date +%s)
+    THREE_WEEKS_AGO=$(date -d '3 weeks ago' +%s)
 
-        # Continue the revert after resolving conflicts
-        git revert --continue
+    if (( COMMIT_TIMESTAMP < THREE_WEEKS_AGO )); then
+        echo "SHA $SHA is older than 3 weeks. Rollbacks are only allowed for SHAs made in the past 3 weeks."
+        exit 1
     fi
 }
 
@@ -25,19 +19,22 @@ else
   exit 1
 fi
 
+check_commit_age
+
 # Check if the commit is a merge commit - this command fails when it's not a merge commit, ignore the failure
 IS_MERGE=$(git log --merges --pretty=format:"%H" | grep "$SHA" || true)
 
 if [ -n "$IS_MERGE" ]; then
-  echo "The commit $SHA is a merge commit."
+  echo "SHA $SHA is a merge commit."
 
   # Revert the merge commit with the first parent (-m 1)
-  git revert -m 1 "$SHA" || true
+  git revert -X ours --no-commit -m 1 "$SHA" || true
 else
-  echo "The commit $SHA is a regular commit."
+  echo "SHA $SHA is a regular commit."
 
   # Revert the regular commit
-  git revert "$SHA" || true
+  git revert -X ours --no-commit "$SHA" || true
 fi
 
-resolve_conflicts
+# Commit changes
+git commit -m "Reverts changes of $SHA, Triggered by: $GITLAB_USER_NAME"
