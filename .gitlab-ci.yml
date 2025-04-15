@@ -8,6 +8,7 @@ stages:
   - pipeline
   - test
   - quality
+  - merge
   - destroy
   - deploy
 
@@ -272,6 +273,24 @@ quality:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
 
 ####################################################
+# Complete a merge request in a pipeline.
+####################################################
+.auto-merge:
+  cache: []
+  before_script:
+    - git fetch -q
+    - git config user.name "${PAT_NAME}"
+    - git config user.email "${PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+    - git checkout -q $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    - git pull --ff -q
+  script:
+    - source ./scripts/bash/auto_merge.sh
+  after_script:
+    - git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
+    - git branch -D $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+
+####################################################
 # Declare jobs for the sandbox org.
 ####################################################
 test:predeploy:dev:
@@ -338,6 +357,23 @@ destroy:dev-web:
   variables:
     AUTH_ALIAS: SANDBOX
     AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: sandbox
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+merge:dev:
+  extends: .auto-merge
+  stage: merge
+  resource_group: merge-dev
+  needs: []
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'dev'
+      when: manual
+  allow_failure: false
   environment:
     name: sandbox
     url: https://avalara--dev.sandbox.my.salesforce.com
@@ -412,8 +448,25 @@ destroy:fqa-web:
     AUTH_ALIAS: FQA
     AUTH_URL: $FQA_AUTH_URL
   environment:
-    name: sandbox
+    name: fqa
     url: fqa://avalara--fqa.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+merge:fqa:
+  extends: .auto-merge
+  stage: merge
+  resource_group: merge-fqa
+  needs: []
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fqa'
+      when: manual
+  allow_failure: false
+  environment:
+    name: fqa
+    url: https://avalara--fqa.sandbox.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
@@ -487,5 +540,22 @@ destroy:prd-web:
   environment:
     name: prd
     url: fqa://avalara.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+merge:prd:
+  extends: .auto-merge
+  stage: merge
+  resource_group: merge-prd
+  needs: []
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'dev' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fqa'
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  environment:
+    name: prd
+    url: https://avalara.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
