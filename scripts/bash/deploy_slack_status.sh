@@ -1,13 +1,20 @@
 #!/bin/bash
 set -euo pipefail
 
+# Function to print the Slack summary message
 function print_slack_summary_build() {
     local slack_msg_header
     local pipeline_description
     local environment_name="${CI_ENVIRONMENT_NAME}"
+    local pushed_by_user="${GITLAB_USER_NAME}"
+
+    # Look for "Triggered By: <name>"
+    triggered_by=$(echo "${CI_COMMIT_MESSAGE}" | sed -nE 's/.*[Tt]riggered [Bb]y:[[:space:]]*(.*)/\1/p')
+    if [[ -n "${triggered_by}" ]]; then
+        pushed_by_user="${triggered_by}"
+    fi
 
     if [[ "${CI_JOB_STAGE}" == "test" ]]; then
-        # remove "validate-" in environment name
         environment_name="${environment_name/validate-/}"
         pipeline_description="Validation against ${environment_name}"
     elif [[ "${CI_JOB_STAGE}" == "destroy" ]]; then
@@ -45,7 +52,7 @@ function print_slack_summary_build() {
                     },
                     {
                         "type": "mrkdwn",
-                        "text": "*Pushed By:*\n${GITLAB_USER_NAME}"
+                        "text": "*Pushed By:*\n${pushed_by_user}"
                     },
                     {
                         "type": "mrkdwn",
@@ -65,6 +72,7 @@ function print_slack_summary_build() {
 SLACK
 }
 
+# Function to share Slack update using the webhook URL
 function share_slack_update_build() {
     local slack_webhook
     slack_webhook="$SLACK_WEBHOOK"
