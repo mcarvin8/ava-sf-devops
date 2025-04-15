@@ -44,6 +44,7 @@ variables:
 rollback:
   image: ubuntu:latest
   stage: pipeline
+  cache: []
   rules:
     - if: $CI_PIPELINE_SOURCE == 'web' && $SHA
       when: always
