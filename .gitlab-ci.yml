@@ -267,7 +267,7 @@ quality:
 .destroy-metadata-web:
   extends: .salesforce-container
   script:
-    - source ./scripts/bash/create_destroy_package_web.sh;
+    - source ./scripts/bash/create_destroy_package_web.sh
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
