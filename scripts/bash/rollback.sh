@@ -36,5 +36,21 @@ else
   git revert -X ours --no-commit "$SHA" || true
 fi
 
+# Extract original commit message from SHA
+ORIGINAL_COMMIT_MSG=$(git log -1 --pretty=%B "$SHA")
+
+# Extract <Package> block from original commit message
+PACKAGE_LIST=$(echo "$ORIGINAL_COMMIT_MSG" | sed -n '/<Package>/,/<\/Package>/p')
+
+# Build custom revert commit message
+COMMIT_MSG="Reverts changes of $SHA, Triggered by: $GITLAB_USER_NAME"
+
+if [[ -n "$PACKAGE_LIST" ]]; then
+    COMMIT_MSG+="
+
+Packages list from original commit:
+$PACKAGE_LIST"
+fi
+
 # Commit changes
-git commit -m "Reverts changes of $SHA, Triggered by: $GITLAB_USER_NAME"
+git commit -m "$COMMIT_MSG"
