@@ -540,7 +540,7 @@ destroy:prd-web:
     AUTH_URL: $PRD_AUTH_URL
   environment:
     name: prd
-    url: fqa://avalara.salesforce.com
+    url: https://avalara.my.salesforce.com
   tags: 
     - aws,prd,us-west-2
 
