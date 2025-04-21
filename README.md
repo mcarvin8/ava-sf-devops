@@ -12,6 +12,7 @@ This repository demonstrates how to use GitLab actions, the Salesforce CLI (`sf`
   - [Optional Ad-Hoc Jobs](#optional-ad-hoc-jobs)
   - [Test Stage](#test-stage)
   - [Quality Stage](#quality-stage)
+  - [Merge Stage](#merge-stage)
   - [Destroy Stage](#destroy-stage)
   - [Deploy Stage](#deploy-stage)
 - [Declare Metadata to Deploy](#declare-metadata-to-deploy)
@@ -67,17 +68,19 @@ This stage ensures that metadata changes are properly validated and tested.
      - Requires `$AUTH_URL` and `$AUTH_ALIAS` variables.
    - **Code Coverage**: The `apex-code-coverage-transformer` creates JaCoCo-formatted reports, which can be visualized in GitLab v17.
 
-### Merge Stage
-This stage completes a merge request using the Project Access Token if the merge request has merge conflicts. Merge conflicts will be resolved automatically by accepting all incoming changes (source branch version).
-
-These jobs require the `PAT_NAME`, `PAT_USER_NAME`, `PAT_VALUE` CI/CD variables described in the Pipeline stage jobs.
-
-Ideally, this stage shouldn't be needed if you enforce branches to be rebased prior to merge or would like to resolve conflicts differently, but this provides a way to consisently resolve merge conflicts if your repo is conflict-prone.
-
 ### Quality Stage
 This stage runs SonarQube scans (if applicable) after all test jobs.
    - Relies on JaCoCo coverage reports created by `apex-code-coverage-transformer` in the test jobs.
    - Can be modified or removed if SonarQube is not used.
+
+### Merge Stage
+This stage completes a merge request using the Project Access Token if the merge request has merge conflicts. Merge conflicts will be resolved automatically by accepting all incoming changes (source branch version).
+
+This job will be the final job in a merge request pipeline and can be triggered at any point without needing the `test` or `quality` stage to pass.
+
+These jobs require the `PAT_NAME`, `PAT_USER_NAME`, `PAT_VALUE` CI/CD variables described in the Pipeline stage jobs.
+
+Ideally, this stage shouldn't be needed if you enforce branches to be rebased prior to merge or would like to resolve conflicts differently, but this provides a way to consisently resolve merge conflicts if your repo is conflict-prone.
 
 ### Destroy Stage
 Destroy metadata from the Salesforce org.
