@@ -237,8 +237,8 @@ quality:
     COMMIT_MSG: $CI_COMMIT_MESSAGE
   script:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
-    - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/create_package.sh
+    - source ./scripts/bash/package_check.sh
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
