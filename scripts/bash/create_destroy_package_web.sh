@@ -12,4 +12,4 @@ echo "$PACKAGE" | tr ';' '\n' > "$PACKAGE_LIST_FILE"
 sf sfpl xml -l "$PACKAGE_LIST_FILE" -x "$DESTRUCTIVE_CHANGES_PACKAGE" -n
 
 # need an empty package.xml for destructive deployments
-sf sfpc combine -c "$DESTRUCTIVE_PACKAGE" -n
+sf sfpl xml -x "$DESTRUCTIVE_PACKAGE"
