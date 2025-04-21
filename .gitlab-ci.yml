@@ -222,6 +222,7 @@ quality:
     - echo y | sf plugins install apex-code-coverage-transformer@latest
     - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
+    - sf sfpl list -x "$DEPLOY_PACKAGE"
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -239,6 +240,7 @@ quality:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
     - source ./scripts/bash/package_check.sh
+    - sf sfpl list -x "$DEPLOY_PACKAGE"
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -255,6 +257,7 @@ quality:
     BEFORE_SHA: $CI_COMMIT_BEFORE_SHA
   script:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
+    - sf sfpl list -x "$DESTRUCTIVE_CHANGES_PACKAGE"
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -266,6 +269,7 @@ quality:
   extends: .salesforce-container
   script:
     - source ./scripts/bash/create_destroy_package_web.sh
+    - sf sfpl list -x "$DESTRUCTIVE_CHANGES_PACKAGE"
     - source ./scripts/bash/destroy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
