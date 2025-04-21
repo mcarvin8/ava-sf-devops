@@ -47,7 +47,7 @@ The CI/CD model in `.gitlab-ci.yml` follows the org branching model, where each 
 
 ## Pipeline Stages
 
-### 1. Pipeline Stage (Optional Ad-Hoc Jobs)
+### Pipeline Stage (Optional Ad-Hoc Jobs)
 These are optional ad-hoc jobs that can be removed if not needed.
    - **Rollback**: Roll back previous deployments via a web-based pipeline.
    - **ProdBackfill**: Used to refresh long-running branches with changes from `main` when merging into other long-running branches.
@@ -60,19 +60,26 @@ These CI/CD variables should be configured in the repo with the token attributes
 - `PAT_USER_NAME` should be the user name of the project access token user
 - `PAT_VALUE` should contain the project access token value
 
-### 2. Test Stage
+### Test Stage
 This stage ensures that metadata changes are properly validated and tested.
    - **Validation**: When a merge request (MR) is opened, it will validate the metadata changes in the target org. Each org has its own validate job.
    - **Unit Testing**: A [scheduled pipeline](https://docs.gitlab.com/ci/pipelines/schedules/) with `$JOB_NAME` set to "unitTest" runs all local tests in the target org.
      - Requires `$AUTH_URL` and `$AUTH_ALIAS` variables.
    - **Code Coverage**: The `apex-code-coverage-transformer` creates JaCoCo-formatted reports, which can be visualized in GitLab v17.
 
-### 3. Quality Stage
+### Merge Stage
+This stage completes a merge request using the Project Access Token if the merge request has merge conflicts. Merge conflicts will be resolved automatically by accepting all incoming changes (source branch version).
+
+These jobs require the `PAT_NAME`, `PAT_USER_NAME`, `PAT_VALUE` CI/CD variables described in the Pipeline stage jobs.
+
+Ideally, this stage shouldn't be needed if you enforce branches to be rebased prior to merge or would like to resolve conflicts differently, but this provides a way to consisently resolve merge conflicts if your repo is conflict-prone.
+
+### Quality Stage
 This stage runs SonarQube scans (if applicable) after all test jobs.
    - Relies on JaCoCo coverage reports created by `apex-code-coverage-transformer` in the test jobs.
    - Can be modified or removed if SonarQube is not used.
 
-### 4. Destroy Stage
+### Destroy Stage
 Destroy metadata from the Salesforce org.
 
 The model provides 2 methods to destroy metadata:
@@ -87,7 +94,7 @@ The model provides 2 methods to destroy metadata:
    - Each org has its own destroy-web job.
    - Allows isolated, controlled destructions versus method 1.
 
-### 5. Deploy Stage
+### Deploy Stage
 Deploys constructive metadata changes to the target org. Each org has its own deploy job.
 
 ## Declare Metadata to Deploy
