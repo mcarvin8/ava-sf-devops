@@ -1,4 +1,5 @@
 #!/bin/bash
+# Reverts the provided commit SHA and include the SHA's package list if found
 set -e
 
 function check_commit_age() {

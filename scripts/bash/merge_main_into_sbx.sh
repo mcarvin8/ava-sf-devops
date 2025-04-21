@@ -1,4 +1,6 @@
 #!/bin/bash
+# Merge the default branch back into sandbox org branches if you have long-running branches for each org
+# and create story branches from default.
 set -e
 
 function handle_delete_conflicts() {

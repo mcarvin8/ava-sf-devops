@@ -1,4 +1,5 @@
 #!/bin/bash
+# Deploys or validates metadata in the target org
 set -e
 
 # Run deployment without tests for non-apex

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Validate the destructive changes package before running the destructive deployment to the target org.
 set -e
 
 # run destruction only if destructive changes package has types

@@ -1,4 +1,5 @@
 #!/bin/bash
+# Checks the deployment package.xml for emptyness, Apex, Connected Apps, wildcards
 set -e
 
 # verify package has types to deploy

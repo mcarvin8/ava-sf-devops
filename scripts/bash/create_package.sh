@@ -1,4 +1,7 @@
 #!/bin/bash
+# Create the deployment package.xml by combining sfdx-git-delta and sf-package-list output together,
+# if a developer provides a package list in their MR description/commit message
+
 set -e
 
 # Define a function to build package.xml from commit message

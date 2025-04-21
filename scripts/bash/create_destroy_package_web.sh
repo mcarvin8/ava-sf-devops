@@ -1,5 +1,7 @@
 #!/bin/bash
+# Creates the destructive packages using variables defined in a web pipeline
 set -e
+
 # Create directory if it don't exist
 mkdir -p "destructiveChanges"
 
