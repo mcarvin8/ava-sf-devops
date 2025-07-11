@@ -7,6 +7,7 @@ cache:
 stages:
   - pipeline
   - test
+  - pmd
   - quality
   - merge
   - destroy
@@ -144,8 +145,36 @@ test:postrun:
     - aws,prd,us-west-2
 
 ####################################################
-# Scan the code base with SonarQube.
+# Scan the code base with PMD & SonarQube.
 ####################################################
+pmd-code-check:
+  image: eclipse-temurin:17
+  stage: pmd
+  allow_failure: true
+  variables:
+    PMD_VERSION: "6.55.0"
+    RULESET_FILE: "apexruleset.xml"
+  rules:
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      changes:
+        - 'force-app/main/default/classes/*.cls'
+      when: always
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'unitTest'
+      when: always
+  script:
+    - apt-get update && apt-get install -y unzip curl
+    - curl -L -o pmd-bin.zip https://github.com/pmd/pmd/releases/download/pmd_releases%2F${PMD_VERSION}/pmd-bin-${PMD_VERSION}.zip
+    - unzip -q pmd-bin.zip
+    - set +e
+    - pmd-bin-${PMD_VERSION}/bin/run.sh pmd -d "force-app/main/default/classes" -R "${RULESET_FILE}" -f xml -l apex -reportfile "pmd-report.xml" -no-cache
+    - exit 0
+  artifacts:
+    paths:
+      - pmd-report.xml
+    expire_in: 2 weeks
+  tags:
+    - aws,prd,us-west-2
+
 quality:
   image:
     name: sonarsource/sonar-scanner-cli:5.0.1
@@ -184,13 +213,15 @@ quality:
           -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
           -Dsonar.gitlab.ref_name=$SONAR_REF \
           -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
-          -Dsonar.jacoco.reportPath=coverage.xml
+          -Dsonar.jacoco.reportPath=coverage.xml \
+          -Dsonar.apex.pmd.reportPaths=pmd-report.xml
       else
         sonar-scanner \
           -Dsonar.qualitygate.wait=$SONAR_GATE \
           -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
           -Dsonar.gitlab.ref_name=$SONAR_REF \
-          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA
+          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
+          -Dsonar.apex.pmd.reportPaths=pmd-report.xml
       fi
   tags:
     - aws,prd,us-west-2

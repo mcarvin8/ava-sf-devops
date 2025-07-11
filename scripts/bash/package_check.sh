@@ -19,9 +19,8 @@ fi
 
 # Check for Apex in the package and determine specified tests if true
 if grep -iq "<name>ApexClass</name>" "$DEPLOY_PACKAGE" || grep -iq "<name>ApexTrigger</name>" "$DEPLOY_PACKAGE"; then
-    echo "Found ApexClass or ApexTrigger in $DEPLOY_PACKAGE, looking for specified tests for deployment..."
-    testclasses=$(sf apextests list -x "$DEPLOY_PACKAGE")
-    echo $testclasses
+    echo "Found ApexClass or ApexTrigger in $DEPLOY_PACKAGE, tests will be required for deployment..."
+    testclasses="testing required"
 else
     echo "ApexClass or ApexTrigger not found in $DEPLOY_PACKAGE"
     testclasses="not a test"
