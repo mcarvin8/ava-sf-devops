@@ -28,7 +28,7 @@ variables:
   image: ubuntu:latest
   before_script:
     - apt-get update
-    - apt-get install -y curl git jq
+    - apt-get install -y curl git jq python3
     - curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
     - apt-get install -y nodejs
     - npm install --global @salesforce/cli@latest
@@ -252,8 +252,7 @@ quality:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - echo y | sf plugins install apex-code-coverage-transformer@latest
     - source ./scripts/bash/create_package.sh
-    - source ./scripts/bash/package_check.sh
-    - sf sfpl list -x "$DEPLOY_PACKAGE"
+    - testclasses=$(python3 ./scripts/python/package_check.py -x "$DEPLOY_PACKAGE" -s "$CI_JOB_STAGE" -e "$CI_ENVIRONMENT_NAME" -m "$CI_COMMIT_MESSAGE")
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
@@ -270,8 +269,7 @@ quality:
   script:
     - sf sgd:source:delta --from $BEFORE_SHA --to $CI_COMMIT_SHA --output "."
     - source ./scripts/bash/create_package.sh
-    - source ./scripts/bash/package_check.sh
-    - sf sfpl list -x "$DEPLOY_PACKAGE"
+    - testclasses=$(python3 ./scripts/python/package_check.py -x "$DEPLOY_PACKAGE" -s "$CI_JOB_STAGE" -e "$CI_ENVIRONMENT_NAME" -m "$CI_COMMIT_MESSAGE")
     - source ./scripts/bash/deploy_metadata_sf.sh
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
