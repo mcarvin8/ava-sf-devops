@@ -2,5 +2,6 @@
     "deployCoverageJsonPath": "coverage/coverage/coverage.json",
     "testCoverageJsonPath": "coverage/test-result-codecoverage.json",
     "outputReportPath": "coverage.xml",
-    "format": "jacoco"
+    "format": "sonar,cobertura"
 }
+
