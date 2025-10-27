@@ -1,5 +1,17 @@
 #!/bin/bash
-# Reverts the provided commit SHA and include the SHA's package list if found
+################################################################################
+# Script: rollback.sh
+# Description: Reverts a specific commit (regular or merge) on the current 
+#              branch by creating a new revert commit. Validates that the commit
+#              exists in the branch history and is less than 3 weeks old. 
+#              Restores the original package.xml for correct redeployment.
+# Usage: Called from CI/CD pipeline with SHA environment variable
+# Environment Variables Required:
+#   - SHA: Git commit SHA to revert (must be < 3 weeks old)
+#   - CI_COMMIT_BRANCH: Branch to perform rollback on
+#   - MAINTAINER_PAT_NAME, MAINTAINER_PAT_VALUE
+#   - GITLAB_USER_NAME
+################################################################################
 set -e
 
 function check_commit_age() {
@@ -12,6 +24,13 @@ function check_commit_age() {
         exit 1
     fi
 }
+
+# Must fetch before checking out branches
+git fetch -q
+git config user.name "${MAINTAINER_PAT_NAME}"
+git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+git checkout -q $CI_COMMIT_BRANCH
+git pull --ff -q
 
 if git merge-base --is-ancestor "$SHA" HEAD; then
   echo "SHA $SHA is valid in the current branch."
@@ -37,21 +56,16 @@ else
   git revert -X ours --no-commit "$SHA" || true
 fi
 
-# Extract original commit message from SHA
-ORIGINAL_COMMIT_MSG=$(git log -1 --pretty=%B "$SHA")
-
-# Extract <Package> block from original commit message
-PACKAGE_LIST=$(echo "$ORIGINAL_COMMIT_MSG" | sed -n '/<Package>/,/<\/Package>/p')
-
-# Build custom revert commit message
-COMMIT_MSG="Reverts changes of $SHA, Triggered by: $GITLAB_USER_NAME"
-
-if [[ -n "$PACKAGE_LIST" ]]; then
-    COMMIT_MSG+="
-
-Packages list from original commit:
-$PACKAGE_LIST"
-fi
+# Re-insert the commit's package.xml to re-deploy the correct package
+git checkout $SHA -- manifest/package.xml
+git add manifest/package.xml
 
 # Commit changes
-git commit -m "$COMMIT_MSG"
+git commit -m "Reverts changes of $SHA, Triggered by: $GITLAB_USER_NAME"
+
+# Push changes to remote
+git push "https://${MAINTAINER_PAT_NAME}:${MAINTAINER_PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
+# Cleanup
+git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
+git branch -D $CI_COMMIT_BRANCH

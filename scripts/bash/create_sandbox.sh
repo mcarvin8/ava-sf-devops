@@ -1,6 +1,15 @@
 #!/bin/bash
-# Create or refresh sandbox using the Salesforce CLI
-# Requires $SANDBOX set in environment and jq installed
+################################################################################
+# Script: create_sandbox.sh
+# Description: Creates a new Salesforce sandbox or refreshes an existing one
+#              using the Salesforce CLI. Checks against a DO_NOT_REFRESH list
+#              to prevent accidental refreshes of protected sandboxes.
+# Usage: Called from CI/CD pipeline
+# Dependencies: Salesforce CLI (sf), jq
+# Environment Variables Required:
+#   - SANDBOX: Name of the sandbox to create/refresh
+#   - DO_NOT_REFRESH: Comma-separated list of sandboxes blocked from refresh
+################################################################################
 
 COMMAND_OUTPUT_FILE="sandboxes.json"
 SANDBOX_DEF_FILE="config/sandbox-def.json"

@@ -1,0 +1,146 @@
+####################################################
+# Test and Quality Jobs
+# Unit testing, PMD code analysis, and SonarQube quality gates
+####################################################
+
+####################################################
+# Run all local tests in fullqa on a schedule.
+# Coverage results will be passed to SonarQube.
+####################################################
+test:unit:
+  stage: test
+  rules:
+    # this pipeline is current failing in the "test:postrun" stage for unknown reason. tests run in the org but the delay may not be enough anymore.
+    # removing this rule until the developer teams actually have a use case for this Run All Local Test pipline outside of SonarQube.
+    #- if: $CI_COMMIT_REF_NAME == 'fullqa' && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'localTests'
+      #when: always
+    - when: never
+  allow_failure: false
+  artifacts:
+    paths:
+      - test_run_id.txt
+    expire_in: 1 day 
+  script:
+    - echo $FULLQA_AUTH_URL | sf org login sfdx-url --set-default --alias FULLQA --sfdx-url-stdin
+    - sf apex run test --test-level RunLocalTests --result-format human > ./id.txt
+    - source ./scripts/bash/extract_test_id.sh
+  tags:
+    - aws,prd,us-west-2
+
+test:postrun:
+  stage: test
+  rules:
+    # this pipeline is current failing in the "test:postrun" stage for unknown reason. tests run in the org but the delay may not be enough anymore.
+    # removing this rule until the developer teams actually have a use case for this Run All Local Test pipline outside of SonarQube.
+    #- if: $CI_COMMIT_REF_NAME == 'fullqa' && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'localTests'
+      #when: delayed
+      #start_in: 90 minutes
+      #needs: ['test:unit']
+    - when: never
+  allow_failure: false
+  artifacts:
+    paths:
+      - coverage-sonar.xml
+      - coverage/*
+    expire_in: 2 weeks
+  script:
+    - echo y | sf plugins install apex-code-coverage-transformer@latest
+    - TEST_RUN_ID=$(cat test_run_id.txt)
+    - echo $FULLQA_AUTH_URL | sf org login sfdx-url --set-default --alias FULLQA --sfdx-url-stdin
+    # set || true so job passes even if there are failed tests
+    - sf apex get test --test-run-id $TEST_RUN_ID --code-coverage -r json -d "coverage" > result.json || true
+    - source ./scripts/bash/parse_test_result.sh
+  after_script:
+    - source ./scripts/bash/post_test_result.sh; share_slack_update_build
+  tags:
+    - aws,prd,us-west-2
+
+####################################################
+# Scan the code base with PMD.
+####################################################
+pmd-code-check:
+  image: artifacts.platform.avalara.io/docker/eclipse-temurin:17
+  stage: quality
+  allow_failure: true
+  cache: []
+  variables:
+    PMD_VERSION: "7.16.0"
+    RULESET_FILES: "scripts/pmd/apexruleset.xml,scripts/pmd/require_cmt_switch.xml"
+    PMD_REPORT: "pmd-report.xml"
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'ContPar'
+      changes:
+        - 'force-app/main/default/classes/*.cls'
+        - 'force-app/main/default/triggers/*.trigger'
+      when: always
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'fullQualityCodeScan'
+      when: always
+  script:
+    - apt-get update && apt-get install -y unzip curl
+    - curl -fL -o pmd-dist.zip https://github.com/pmd/pmd/releases/download/pmd_releases/${PMD_VERSION}/pmd-dist-${PMD_VERSION}-bin.zip
+    - unzip -q pmd-dist.zip
+    - pmd-bin-${PMD_VERSION}/bin/pmd check -d "force-app/main/default/classes" -d "force-app/main/default/triggers" -R "${RULESET_FILES}" -f xml -r "${PMD_REPORT}" --no-cache --no-fail-on-error --no-fail-on-violation
+  artifacts:
+    paths:
+      - pmd-report.xml
+    expire_in: 2 weeks
+  tags:
+    - aws,prd,us-west-2
+
+####################################################
+# SonarQube quality gate analysis.
+####################################################
+quality:
+  image:
+    name: artifacts.platform.avalara.io/docker/sonarsource/sonar-scanner-cli:5.0.1
+  stage: quality
+  cache:
+    key: $CI_JOB_NAME
+    paths:
+      - .sonar/cache
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar'
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'ContPar'
+      changes:
+        - 'force-app/main/default/classes/*.cls'
+        - 'force-app/main/default/triggers/*.trigger'
+      variables:
+        SONAR_REF: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+      when: always
+      needs: ['pmd-code-check']
+    - if: $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'fullQualityCodeScan'
+      when: always
+      variables:
+        SONAR_REF: $CI_COMMIT_REF_NAME
+      needs: ['pmd-code-check']
+    - when: never
+  allow_failure: true
+  variables:
+    SONAR_USER_HOME: '${CI_PROJECT_DIR}/.sonar'
+    GIT_DEPTH: '0'
+    SONAR_LOGIN: $SONAR_TOKEN
+    SONAR_HOST_URL: $SONAR_URL
+    SONAR_GATE: 'false'
+  script:
+    - |
+      if [ -f coverage-sonar.xml ]; then
+        sonar-scanner \
+          -Dsonar.qualitygate.wait=$SONAR_GATE \
+          -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
+          -Dsonar.gitlab.ref_name=$SONAR_REF \
+          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
+          -Dsonar.coverageReportPaths=coverage-sonar.xml \
+          -Dsonar.apex.pmd.reportPaths=pmd-report.xml
+      else
+        sonar-scanner \
+          -Dsonar.qualitygate.wait=$SONAR_GATE \
+          -Dsonar.projectKey=$CI_PROJECT_PATH_SLUG \
+          -Dsonar.gitlab.ref_name=$SONAR_REF \
+          -Dsonar.gitlab.commit_sha=$CI_COMMIT_SHORT_SHA \
+          -Dsonar.apex.pmd.reportPaths=pmd-report.xml
+      fi
+  tags:
+    - aws,prd,us-west-2

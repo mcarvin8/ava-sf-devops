@@ -1,0 +1,157 @@
+####################################################
+# Maintenance and Utility Pipeline Jobs
+# These jobs are separate from the core deployment pipeline
+# and handle various maintenance operations
+####################################################
+
+####################################################
+# Create a release branch.
+####################################################
+releaseBranch:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $RELEASE_BRANCH && $STORY_BRANCHES && $CI_COMMIT_TAG =~ /^rb_v\d+$/
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - echo y | sf plugins install sf-package-combiner@latest
+    - source ./scripts/bash/create_release_branch.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Rollback pipeline.
+# Only runs on web-based pipelines on org branches when $SHA variable is provided.
+####################################################
+rollback:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $SHA && ($CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa' || $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH)
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - source ./scripts/bash/rollback.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Create or refresh a sandbox.
+####################################################
+sandboxRefresh:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" && $SANDBOX && $CI_COMMIT_TAG =~ /^sandbox_v\d+$/'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - echo $PRODUCTION_AUTH_URL | sf org login sfdx-url --set-default --alias PRODUCTION --sfdx-url-stdin
+    - source ./scripts/bash/create_sandbox.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Push production commits back to sandbox branches.
+# This will skip CI pipelines when pushing to GitLab.
+# Allowed to fail in order to not block a production pipeline.
+####################################################
+prodBackfill:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+    - when: never
+  allow_failure: true
+  script:
+    - source ./scripts/bash/merge_main_into_sbx.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Retrieve metadata defined in the package.xml into GitLab branches.
+# $PACKAGE_NAME must be set with file name under scripts/packages
+####################################################
+packageBackfillSbx:
+  stage: maintenance
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $PACKAGE_NAME && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'sbxBackfill'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - echo $FULLQA_AUTH_URL | sf org login sfdx-url --set-default --alias fullqa --sfdx-url-stdin
+    - echo $SANDBOX_AUTH_URL | sf org login sfdx-url --set-default --alias develop --sfdx-url-stdin
+    - source ./scripts/bash/retrieve_packages_sbx.sh
+  tags: 
+    - aws,prd,us-west-2
+
+packageBackfillPrd:
+  stage: maintenance
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $PACKAGE_NAME && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'prdBackfill'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - echo $PRODUCTION_AUTH_URL | sf org login sfdx-url --set-default --alias PRODUCTION --sfdx-url-stdin
+    - source ./scripts/bash/retrieve_packages_prd.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Delete stale branches.
+# Protected branches are unable to be deleted this way.
+####################################################
+branchCleanup:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'monthlyMaintenance'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - source ./scripts/bash/delete_stale_branches.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Delete stale pipelines.
+# Requires an HTTPS token with "Owner" access.
+####################################################
+pipelineCleanup:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'monthlyMaintenance'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - source ./scripts/bash/delete_stale_pipelines.sh
+  tags: 
+    - aws,prd,us-west-2
+
+####################################################
+# Create a delta manifest file for metadata audits.
+####################################################
+metadataAudit:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'metadataAudit'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - echo y | sf plugins install sf-package-combiner@latest
+    - source ./scripts/bash/metadata_audit.sh
+  tags: 
+    - aws,prd,us-west-2
+

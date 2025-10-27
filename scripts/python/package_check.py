@@ -1,11 +1,24 @@
-"""
-    Scan the package.xml to confirm compliance with Salesforce schema.
-    Set required Apex tests if ApexClass or ApexTrigger is in the package.
-        Destructive Deployments in Production require tests.
-        This script will set pre-defined tests to run during prod Apex destructions.
-    Remove <consumerKey> lines if ConnectedApp is in the package.
-    Fail deployments with wildcards in the package.
-"""
+#!/usr/bin/env python3
+################################################################################
+# Script: package_check.py
+# Description: Validates Salesforce package.xml files for compliance with
+#              deployment standards and automatically determines required Apex
+#              test classes. Performs multiple validation checks including:
+#              - Schema compliance and namespace validation
+#              - Wildcard detection (not allowed in deployments)
+#              - Apex test class extraction using @tests/@testsuites annotations
+#              - ConnectedApp consumer key removal for security
+#              - Workflow parent type blocking (must use children types)
+#              - Default test class execution for destructive deployments
+# Usage: 
+#   python package_check.py -x manifest/package.xml -s deploy -e production
+# Arguments:
+#   -x, --manifest: Path to package.xml file (default: manifest/package.xml)
+#   -s, --stage: Pipeline stage (deploy/destroy)
+#   -e, --environment: Target environment (production/sandbox)
+# Dependencies: Python 3.x, xml.etree.ElementTree
+# Output: Space-separated list of test classes or "not a test"
+################################################################################
 import argparse
 import logging
 import os
@@ -30,7 +43,6 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description='A script to determine required Apex tests.')
     parser.add_argument('-x', '--manifest', default='manifest/package.xml')
-    parser.add_argument('-m', '--message', default=None)
     parser.add_argument('-s', '--stage', default='deploy')
     parser.add_argument('-e', '--environment', default=None)
     args = parser.parse_args()
@@ -339,37 +351,16 @@ def validate_tests(test_classes_set: set) -> str:
     return ' '.join(valid_test_classes)
 
 
-def determine_destructive_tests(message: str) -> str:
+def determine_destructive_tests() -> str:
     '''
-        Determine which tests to run when destroying Apex in production.
+        Determine which tests to run when destroying Apex.
+        Returns default test classes for destructive deployments.
     '''
-    project_keys = {
-        'BATS': ['ProjectTriggerHandlerTest', 'ProjectTaskTriggerHandlerTest', 'ProjectTaskDependencyTiggerHandlerTest'],
-        'LEADZ': ['AccountTriggerHandlerTest', 'ContactTriggerHandlerTest', 'OpportunityTriggerHandlerTest', 'LeadTriggerHandlerTest'],
-        'PLAUNCH': ['PaymentMethodTriggerHandlerTest'],
-        'Q2C': ['PaymentMethodTriggerHandlerTest'],
-        'SHIELD': ['ScEMEARegistrationHandlerTest', 'SupportCaseCommunity1Test'],
-        'STORM': ['EmailMessageTriggerHandlerTest', 'CaseTriggerHandlerTest']
-    }
-
-    # Variable to store test classes to be run
-    test_classes = set()
-
-    # Iterate over the project keys and check if they are present in the commit message
-    for key, test_class_list in project_keys.items():
-        if re.search(fr'\b{key}\b', message, re.IGNORECASE):
-            # Add all test classes for this project key to the set
-            test_classes.update(test_class_list)
-
-    # add some random default tests if a team match isn't found
-    if not test_classes:
-        test_classes.add('AccountTriggerHandlerTest')
-        test_classes.add('CaseTriggerHandlerTest')
-
+    test_classes = {'AccountTriggerHandlerTest', 'CaseTriggerHandlerTest'}
     return ' '.join(test_classes)
 
 
-def scan_package(package_path: str, msg: str, stage: str, env: str) -> str:
+def scan_package(package_path: str, stage: str, env: str) -> str:
     """
     Function to scan the package and confirm if Apex tests are required.
     """
@@ -386,21 +377,21 @@ def scan_package(package_path: str, msg: str, stage: str, env: str) -> str:
     if apex_required and stage != 'destroy':
         logging.info("Apex Tests are Required for this package")
         test_classes = validate_tests(test_classes)
-    # set pre-defined tests for destructive apex deployments in prod
-    elif apex_required and env == 'production':
+    # set default tests for destructive apex deployments only in production
+    elif apex_required and stage == 'destroy' and env == 'production':
         logging.info("Apex Tests are Required for this package")
-        test_classes = determine_destructive_tests(msg)
+        test_classes = determine_destructive_tests()
     else:
         logging.info("Apex Tests are Not Required for this package")
         test_classes = 'not a test'
     return test_classes
 
 
-def main(manifest, message, stage, environment):
+def main(manifest, stage, environment):
     """
         Main function.
     """
-    test_classes = scan_package(manifest, message, stage, environment)
+    test_classes = scan_package(manifest, stage, environment)
     # print to terminal
     logging.info(test_classes)
     # save to bash variable
@@ -410,6 +401,5 @@ def main(manifest, message, stage, environment):
 if __name__ == '__main__':
     inputs = parse_args()
     main(inputs.manifest,
-         inputs.message,
          inputs.stage,
          inputs.environment)

@@ -1,0 +1,83 @@
+####################################################
+# Common Dev Org Jobs
+# All deployment jobs for the development environment
+####################################################
+
+test:predeploy:dev:
+  image: $CI_REGISTRY_IMAGE:$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+  extends: .validate-metadata
+  stage: test
+  resource_group: develop
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      when: manual
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+  environment:
+    name: validate-dev
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+deploy:dev:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: develop
+  rules:
+    - if: $SANDBOX_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == 'develop' && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+    GT_ANNOTATION_ENVIRONMENT: dev
+  environment:
+    name: dev
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:dev:
+  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+  extends: .delete-metadata
+  stage: destroy
+  resource_group: develop
+  rules:
+    - if: $SANDBOX_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == 'develop' && $CI_PIPELINE_SOURCE == 'web' && $PACKAGE
+      when: always
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: SANDBOX
+    AUTH_URL: $SANDBOX_AUTH_URL
+    GT_ANNOTATION_ENVIRONMENT: dev
+  environment:
+    name: dev
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+merge:dev:
+  extends: .auto-merge
+  stage: merge
+  resource_group: merge-dev
+  needs: []
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      when: manual
+  allow_failure: false
+  environment:
+    name: dev
+    url: https://avalara--dev.sandbox.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2

@@ -1,7 +1,25 @@
 #!/bin/bash
-# automates the completion of a merge request from the source branch into the target branch from a CI pipeline
-# if there are merge conflicts, the source branch file version will be used
+################################################################################
+# Script: auto_merge.sh
+# Description: Automates the completion of a merge request from the source 
+#              branch into the target branch from a CI pipeline. Automatically 
+#              resolves merge conflicts by preferring the source branch version.
+# Usage: Called automatically from GitLab CI/CD pipeline
+# Environment Variables Required:
+#   - CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+#   - CI_MERGE_REQUEST_SOURCE_BRANCH_NAME
+#   - MAINTAINER_PAT_NAME, MAINTAINER_PAT_VALUE
+#   - GITLAB_USER_NAME
+################################################################################
 set -e
+
+# Must fetch before checking out branches
+git fetch -q
+git config user.name "${MAINTAINER_PAT_NAME}"
+git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+
+git checkout -q $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+git pull --ff -q
 
 # Attempt auto-merge preferring source content when possible
 git merge --no-ff -X theirs --no-commit origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME || true
@@ -15,17 +33,15 @@ git ls-files -u | cut -f2 | sort -u | while read -r file; do
     git add "$file" 2>/dev/null || true
 done
 
-# Extract package info from merge request description
-PACKAGE_LIST=$(echo "$CI_MERGE_REQUEST_DESCRIPTION" | sed -n '/<Package>/,/<\/Package>/p')
+# Re-insert the source branch's package.xml to confirm deployment is correct
+git checkout origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME -- manifest/package.xml
+git add manifest/package.xml
 
-# Create commit message
-COMMIT_MSG="Merge remote-tracking branch 'origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME' into $CI_MERGE_REQUEST_TARGET_BRANCH_NAME. Triggered by: $GITLAB_USER_NAME"
-if [[ -n "$PACKAGE_LIST" ]]; then
-    COMMIT_MSG+="
+git commit -m "Merge remote-tracking branch 'origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME' into $CI_MERGE_REQUEST_TARGET_BRANCH_NAME. Triggered by: $GITLAB_USER_NAME"
 
-Packages list in this merge request:
-$PACKAGE_LIST"
-fi
+# Push changes to remote
+git push "https://${MAINTAINER_PAT_NAME}:${MAINTAINER_PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
-git commit -m "$COMMIT_MSG"
-git push "https://${PAT_NAME}:${PAT_VALUE}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+# Cleanup, switch back to the SHA that triggered this pipeline and delete local branches
+git -c advice.detachedHead=false checkout -q $CI_COMMIT_SHORT_SHA
+git branch -D $CI_MERGE_REQUEST_TARGET_BRANCH_NAME

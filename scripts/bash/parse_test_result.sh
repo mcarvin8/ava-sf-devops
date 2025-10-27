@@ -1,4 +1,17 @@
 #!/bin/bash
+################################################################################
+# Script: parse_test_result.sh
+# Description: Parses Salesforce test results from JSON output and generates
+#              a formatted Slack payload with test outcome, including failures
+#              and success notifications. Prepares slackPayload.json for posting.
+# Usage: Called from CI/CD pipeline after test execution completes
+# Dependencies: jq
+# Environment Variables Required:
+#   - TEST_RUN_ID: Salesforce test run identifier
+#   - CI_JOB_URL: Link to the CI job for downloading artifacts
+# Input: coverage/test-result-{TEST_RUN_ID}.json
+# Output: slackPayload.json
+################################################################################
 
 # Check if TEST_RUN_ID environment variable is set
 if [[ -z "$TEST_RUN_ID" ]]; then
@@ -32,9 +45,9 @@ TESTS_RAN=$(echo "$SUMMARY" | jq -r '.testsRan')
 FAILING=$(echo "$SUMMARY" | jq -r '.failing')
 
 if [[ "$OUTCOME" == "Failed" ]]; then
-    SUMMARY_TEXT="❌   Automated unit testing for ${HOSTNAME} has *${OUTCOME}* with ${TESTS_RAN} test runs and ${FAILING} failure(s). Test run ID is ${TEST_RUN_ID}. Download pipeline artifacts from ${CI_JOB_URL}."
+    SUMMARY_TEXT=":alert: <!channel> Automated unit testing for ${HOSTNAME} has *${OUTCOME}* with ${TESTS_RAN} test runs and ${FAILING} failure(s). Test run ID is ${TEST_RUN_ID}. Download pipeline artifacts from ${CI_JOB_URL}."
 else
-    SUMMARY_TEXT="✅   Automated unit testing for ${HOSTNAME} has *${OUTCOME}* 🎉 Test run ID is ${TEST_RUN_ID}."
+    SUMMARY_TEXT=":orange-check: <!channel> Automated unit testing for ${HOSTNAME} has *${OUTCOME}*. Test run ID is ${TEST_RUN_ID}."
 fi
 
 # Construct the Slack payload

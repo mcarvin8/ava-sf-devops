@@ -1,0 +1,38 @@
+####################################################
+# Core Pipeline Jobs
+# Build and other pipeline infrastructure jobs
+####################################################
+
+####################################################
+# Build a unique Docker image for the org.
+####################################################
+build:
+  image: artifacts.platform.avalara.io/docker/docker:20.10.16
+  stage: build
+  cache: []
+  services:
+    - name: artifacts.platform.avalara.io/docker/docker:20.10.16-dind
+      alias: docker  
+  rules:
+    - if: ($CI_COMMIT_REF_NAME == 'develop' || $CI_COMMIT_REF_NAME == 'fullqa' || $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH) && $CI_PIPELINE_SOURCE == 'push'
+      changes:
+        - Dockerfile
+      when: always
+  allow_failure: false
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    DOCKER_HOST: tcp://docker:2376 #Necessary for k8s
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  # wait until docker in docker service is ready
+  before_script:
+    - until docker info; do sleep 1; done
+  script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER $CI_REGISTRY --password-stdin
+    # If the current branch is the main/default branch, tag the image as the "production" image.
+    - if [ $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH ]; then IMAGE_TAG=$CI_REGISTRY_IMAGE:production; fi
+    - docker build --tag $IMAGE_TAG .
+    - docker push $IMAGE_TAG
+  tags: 
+    - aws,prd,us-west-2

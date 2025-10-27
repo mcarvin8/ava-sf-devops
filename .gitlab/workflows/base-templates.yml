@@ -1,0 +1,78 @@
+####################################################
+# Base Salesforce Deployment Templates
+# Core authentication, validation, deployment, and deletion logic
+####################################################
+
+####################################################
+# Authenticate to a Salesforce org.
+####################################################
+.authenticate:
+  before_script:
+    - echo $AUTH_URL | sf org login sfdx-url --set-default --alias $AUTH_ALIAS --sfdx-url-stdin
+    - if [ "$CI_JOB_STAGE" == "destroy" ]; then
+        echo y | sf plugins install sf-package-list@latest;
+        source ./scripts/bash/create_destroy_package.sh; 
+      fi
+    - testclasses=$(python3 ./scripts/python/package_check.py -x "$DEPLOY_PACKAGE" -s "$CI_JOB_STAGE" -e "$CI_ENVIRONMENT_NAME")
+
+####################################################
+# Validate metadata in a Salesforce org.
+####################################################
+.validate-metadata:
+  extends: .authenticate
+  artifacts:
+    when: always
+    paths:
+      - coverage-sonar.xml
+    expire_in: 2 weeks
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage-cobertura.xml
+  cache:
+    key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
+    paths:
+      - .sf/
+      - .sfdx/
+  script:
+    - if [ "$testclasses" != "not a test" ];
+      then echo y | sf plugins install apex-code-coverage-transformer@latest;
+      fi
+    - source ./scripts/bash/deploy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+
+####################################################
+# Deploy metadata into a Salesforce org.
+####################################################
+.deploy-metadata:
+  extends: .authenticate
+  script:
+    - !reference [".gitlab-templates:sre:grafana:deployment-annotation:start", script]
+    - source ./scripts/bash/deploy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+    - !reference [".gitlab-templates:sre:grafana:deployment-annotation:end", script]
+
+####################################################
+# Delete metadata in a Salesforce org.
+####################################################
+.delete-metadata:
+  extends: .authenticate
+  variables:
+    DEPLOY_PACKAGE: "destructive/destructiveChanges.xml"
+    DESTRUCTIVE_PACKAGE: "destructive/package.xml"
+  script:
+    - !reference [".gitlab-templates:sre:grafana:deployment-annotation:start", script]
+    - source ./scripts/bash/destroy_metadata_sf.sh
+  after_script:
+    - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
+    - !reference [".gitlab-templates:sre:grafana:deployment-annotation:end", script]
+
+####################################################
+# Complete a merge request in a pipeline.
+####################################################
+.auto-merge:
+  cache: []
+  script:
+    - source ./scripts/bash/auto_merge.sh

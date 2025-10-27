@@ -1,24 +1,21 @@
 #!/bin/bash
-# Validate the destructive changes package before running the destructive deployment to the target org.
+################################################################################
+# Script: destroy_metadata_sf.sh
+# Description: Executes destructive changes deployment to Salesforce, removing
+#              metadata components specified in the destructive changes package.
+#              Runs tests for Apex-related destructive changes in production.
+# Usage: Called from CI/CD pipeline during destroy stage
+# Environment Variables Required:
+#   - testclasses: Test classes to run (or "not a test" for non-Apex)
+#   - DEPLOY_PACKAGE: Path to deployment package (pre-destructive changes)
+#   - DESTRUCTIVE_PACKAGE: Path to destructive changes manifest
+#   - DEPLOY_TIMEOUT
+################################################################################
 set -e
 
-# run destruction only if destructive changes package has types
-if ! grep -q '<types>' $DESTRUCTIVE_CHANGES_PACKAGE ; then
-  echo "---- No changes to destroy ----"
-  exit 1
-fi
-
-# Check for Apex in the destructive package
-if grep -iq "<name>ApexClass</name>" "$DESTRUCTIVE_CHANGES_PACKAGE" || grep -iq "<name>ApexTrigger</name>" "$DESTRUCTIVE_CHANGES_PACKAGE"; then
-    apex="True"
+# Destructive apex deployments in production only require tests
+if [ "$testclasses" == "not a test" ]; then
+    sf project deploy start --pre-destructive-changes $DEPLOY_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -w $DEPLOY_TIMEOUT --verbose
 else
-    apex="False"
-fi
-
-# Run destructive deployment with pre-defined tests if destroying apex in production (prd)
-# Otherwise, destroy without running tests
-if [ "$apex" == "True" ] && ["$CI_ENVIRONMENT_NAME" == "prd"]; then
-    sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -l RunSpecifiedTests -t $DESTRUCTIVE_TESTS -w $DEPLOY_TIMEOUT --verbose 
-else
-    sf project deploy start --pre-destructive-changes $DESTRUCTIVE_CHANGES_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -w $DEPLOY_TIMEOUT --verbose
+    sf project deploy start --pre-destructive-changes $DEPLOY_PACKAGE --manifest $DESTRUCTIVE_PACKAGE -l RunSpecifiedTests -t $testclasses -w $DEPLOY_TIMEOUT --verbose 
 fi

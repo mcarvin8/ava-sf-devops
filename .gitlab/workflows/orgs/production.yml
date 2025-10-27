@@ -1,0 +1,82 @@
+####################################################
+# Production Org Jobs
+# All deployment jobs for the production environment
+####################################################
+
+test:predeploy:prd:
+  extends: .validate-metadata
+  stage: test
+  resource_group: production
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+  environment:
+    name: validate-production
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+deploy:prd:
+  extends: .deploy-metadata
+  stage: deploy
+  resource_group: production
+  rules:
+    - if: $PRODUCTION_DISABLED
+      when: never
+    - if: '$CI_COMMIT_MESSAGE =~ /Retrieve latest production metadata defined in/i'
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
+      when: always
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+    GT_ANNOTATION_ENVIRONMENT: prd
+  environment:
+    name: production
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+destroy:prd:
+  extends: .delete-metadata
+  stage: destroy
+  resource_group: production
+  rules:
+    - if: $PRODUCTION_DISABLED
+      when: never
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'web' && $PACKAGE
+      when: always
+  allow_failure: false
+  variables:
+    AUTH_ALIAS: PRODUCTION
+    AUTH_URL: $PRODUCTION_AUTH_URL
+    GT_ANNOTATION_ENVIRONMENT: prd
+  environment:
+    name: production
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
+
+merge:prd:
+  extends: .auto-merge
+  stage: merge
+  resource_group: merge-prd
+  needs: []
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar'
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: false
+  environment:
+    name: production
+    url: https://avalara.my.salesforce.com
+  tags: 
+    - aws,prd,us-west-2
