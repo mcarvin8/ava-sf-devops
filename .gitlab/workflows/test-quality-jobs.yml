@@ -85,6 +85,7 @@ pmd-code-check:
   artifacts:
     paths:
       - pmd-report.xml
+      - coverage-sonar.xml # include coverage report from the validation job to pass to SonarQube (or another code quality tool)
     expire_in: 2 weeks
   tags:
     - aws,prd,us-west-2
