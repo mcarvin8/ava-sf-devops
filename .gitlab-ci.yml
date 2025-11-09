@@ -29,7 +29,6 @@ include:
   - local: '.gitlab/workflows/test-quality-jobs.yml'
   - local: '.gitlab/workflows/maintenance-pipeline.yml'
   # Org-specific job definitions
-  - local: '.gitlab/workflows/orgs/contpar.yml'
   - local: '.gitlab/workflows/orgs/dev.yml'
   - local: '.gitlab/workflows/orgs/fullqa.yml'
   - local: '.gitlab/workflows/orgs/production.yml'
