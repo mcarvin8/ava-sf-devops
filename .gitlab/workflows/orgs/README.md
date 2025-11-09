@@ -4,7 +4,6 @@ This directory contains individual YAML files for each Salesforce org that parti
 
 ## 📁 Current Orgs
 
-- **`contpar.yml`** - ContPar sandbox environment
 - **`dev.yml`** - Common development sandbox environment  
 - **`fullqa.yml`** - Full QA sandbox environment
 - **`production.yml`** - Production environment
@@ -17,7 +16,7 @@ Follow these steps to add a new Salesforce org to the CI/CD pipeline:
 
 1. **Copy an existing org file** as your template:
    ```bash
-   cp .gitlab/orgs/contpar.yml .gitlab/orgs/staging.yml
+   cp .gitlab/orgs/dev.yml .gitlab/orgs/staging.yml
    ```
 
 2. **Edit the new file** with org-specific details:
@@ -93,7 +92,6 @@ include:
   - local: '.gitlab/test-quality-jobs.yml'
   - local: '.gitlab/maintenance-pipeline.yml'
   # Org-specific job definitions
-  - local: '.gitlab/orgs/contpar.yml'
   - local: '.gitlab/orgs/dev.yml'
   - local: '.gitlab/orgs/fullqa.yml'
   - local: '.gitlab/orgs/production.yml'
