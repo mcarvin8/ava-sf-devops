@@ -68,9 +68,9 @@ pmd-code-check:
     RULESET_FILES: "scripts/pmd/apexruleset.xml,scripts/pmd/require_cmt_switch.xml"
     PMD_REPORT: "pmd-report.xml"
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'ContPar'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
       changes:
         - 'force-app/main/default/classes/*.cls'
         - 'force-app/main/default/triggers/*.trigger'
@@ -85,7 +85,7 @@ pmd-code-check:
   artifacts:
     paths:
       - pmd-report.xml
-      - coverage-sonar.xml # include coverage report from the validation job to pass to SonarQube (or another code quality tool)
+      - coverage-sonar.xml
     expire_in: 2 weeks
   tags:
     - aws,prd,us-west-2
@@ -102,9 +102,9 @@ quality:
     paths:
       - .sonar/cache
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar'
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa'
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'ContPar'
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
       changes:
         - 'force-app/main/default/classes/*.cls'
         - 'force-app/main/default/triggers/*.trigger'
@@ -144,4 +144,22 @@ quality:
           -Dsonar.apex.pmd.reportPaths=pmd-report.xml
       fi
   tags:
+    - aws,prd,us-west-2
+
+####################################################
+# Validates a branch with an open merge request into production
+# has been merged into fullqa and develop branches.
+####################################################
+pre-merge-check:prd:
+  stage: quality
+  rules:
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa'
+      when: never
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+      when: always
+  allow_failure: false
+  cache: []
+  script:
+    - source ./scripts/bash/verify_branch_deployment.sh
+  tags: 
     - aws,prd,us-west-2

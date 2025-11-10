@@ -76,6 +76,302 @@ fi
 
 print_status "$YELLOW" "Source branch SHA: $SOURCE_BRANCH_SHA"
 
+# Function to check how old the source branch is relative to the default branch
+# Returns: "status|age_days|merge_base_sha" format
+# status: "recent" if <= 30 days, "old" if > 30 days, "error" if unable to determine
+check_branch_age() {
+    local source_branch=$1
+    local default_branch=$2
+    local max_age_days=${3:-30}  # Default to 30 days
+    
+    # Find the merge base (common ancestor) between source and default branch
+    local merge_base_sha
+    merge_base_sha=$(git merge-base "origin/$source_branch" "origin/$default_branch" 2>/dev/null || echo "")
+    
+    if [[ -z "$merge_base_sha" ]]; then
+        echo "error|0|"
+        return
+    fi
+    
+    # Get the commit timestamp (Unix timestamp in seconds)
+    local commit_timestamp
+    commit_timestamp=$(git log -1 --format="%ct" "$merge_base_sha" 2>/dev/null || echo "")
+    
+    if [[ -z "$commit_timestamp" ]]; then
+        echo "error|0|$merge_base_sha"
+        return
+    fi
+    
+    # Get current timestamp (Unix timestamp in seconds)
+    # Works on Linux, macOS, and Git Bash on Windows
+    local current_timestamp
+    if command -v date &> /dev/null; then
+        # Try UTC first (more reliable), fallback to local time
+        current_timestamp=$(date -u +%s 2>/dev/null || date +%s 2>/dev/null || echo "")
+    else
+        # Fallback: use epoch time calculation if date command is not available
+        echo "error|0|$merge_base_sha"
+        return
+    fi
+    
+    if [[ -z "$current_timestamp" ]]; then
+        echo "error|0|$merge_base_sha"
+        return
+    fi
+    
+    # Calculate age in days
+    local age_seconds=$((current_timestamp - commit_timestamp))
+    local age_days=$((age_seconds / 86400))  # 86400 seconds in a day
+    
+    # Determine status
+    local status="recent"
+    if [[ $age_days -gt $max_age_days ]]; then
+        status="old"
+    fi
+    
+    echo "$status|$age_days|$merge_base_sha"
+}
+
+# Check branch age relative to default branch
+print_status "$YELLOW" "Checking source branch age relative to default branch..."
+BRANCH_AGE_RESULT=$(check_branch_age "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_DEFAULT_BRANCH" 30)
+BRANCH_AGE_STATUS=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f1)
+BRANCH_AGE_DAYS=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f2)
+BRANCH_MERGE_BASE_SHA=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f3)
+
+if [[ "$BRANCH_AGE_STATUS" == "recent" ]]; then
+    print_status "$GREEN" "✓ Source branch is recent (created from default branch $BRANCH_AGE_DAYS days ago)"
+elif [[ "$BRANCH_AGE_STATUS" == "old" ]]; then
+    print_status "$RED" "✗ Source branch is old (created from default branch $BRANCH_AGE_DAYS days ago)"
+else
+    print_status "$YELLOW" "⚠ Could not determine branch age"
+fi
+
+# Function to check if source branch name contains valid Jira project key
+# Returns: "status" format
+# status: "valid" if contains valid Jira key, "invalid_bar" if contains BAR, "invalid_no_key" if no valid key found
+check_branch_name() {
+    local branch_name=$1
+    local branch_lower=$(echo "$branch_name" | tr '[:upper:]' '[:lower:]')
+    
+    # Check if branch contains BAR (release team project) - fail if found
+    if [[ "$branch_lower" == *"bar"* ]]; then
+        echo "invalid_bar"
+        return
+    fi
+    
+    # Check if branch contains any valid Jira project keys (case insensitive)
+    local valid_keys=("q2c" "storm" "shield" "sfxpro" "leadz" "avatechtdr")
+    for key in "${valid_keys[@]}"; do
+        if [[ "$branch_lower" == *"$key"* ]]; then
+            echo "valid"
+            return
+        fi
+    done
+    
+    # No valid key found
+    echo "invalid_no_key"
+}
+
+# Check branch name for valid Jira project key
+print_status "$YELLOW" "Checking source branch name for valid Jira project key..."
+BRANCH_NAME_STATUS=$(check_branch_name "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME")
+
+if [[ "$BRANCH_NAME_STATUS" == "valid" ]]; then
+    print_status "$GREEN" "✓ Source branch name contains valid Jira project key"
+elif [[ "$BRANCH_NAME_STATUS" == "invalid_bar" ]]; then
+    print_status "$RED" "✗ Source branch name contains BAR (release team project)"
+else
+    print_status "$RED" "✗ Source branch name does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, avatechtdr)"
+fi
+
+# Function to check if source branch contains merges from fullqa or develop branches
+# Returns: "status|offending_commits" format
+# status: "clean" if no forbidden merges found, "forbidden_merge" if found, "error" if unable to check
+check_forbidden_merges() {
+    local source_branch=$1
+    local default_branch=$2
+    local forbidden_branches=("fullqa" "develop")
+    local offending_commits=()
+    
+    # Check commit messages on the source branch for forbidden merge patterns
+    # Only check commits that are on the source branch but NOT on the default branch
+    # This avoids flagging old commits that were already merged into default
+    # Look for patterns like "Merge fullqa into", "merge origin/fullqa into", etc.
+    # We only want to catch merges FROM fullqa/develop INTO the source branch, not the reverse
+    for forbidden_branch in "${forbidden_branches[@]}"; do
+        # Search for merge commits that mention the forbidden branch being merged INTO something
+        # Patterns: "Merge fullqa into", "merge origin/fullqa into", "Merge branch 'fullqa' into"
+        # We use --merges to only check actual merge commits
+        # The pattern ensures the forbidden branch comes before "into" (meaning it's being merged in)
+        # Use "origin/$default_branch..origin/$source_branch" to only check commits unique to source branch
+        local matching_commits
+        matching_commits=$(git log --format="%H" --merges --grep="[Mm]erge.*$forbidden_branch.*into\|[Mm]erge.*origin/$forbidden_branch.*into\|[Mm]erge.*branch.*['\"]$forbidden_branch.*into" "origin/$default_branch..origin/$source_branch" 2>/dev/null || echo "")
+        
+        if [[ -n "$matching_commits" ]]; then
+            # Add matching commits to offending commits list
+            while IFS= read -r commit; do
+                if [[ -n "$commit" ]]; then
+                    offending_commits+=("$commit")
+                fi
+            done <<< "$matching_commits"
+        fi
+    done
+    
+    # Return results
+    if [[ ${#offending_commits[@]} -gt 0 ]]; then
+        # Join offending commits with comma
+        local commits_str
+        commits_str=$(IFS=','; echo "${offending_commits[*]}")
+        echo "forbidden_merge|$commits_str"
+    else
+        echo "clean|"
+    fi
+}
+
+# Check for forbidden merges (fullqa/develop into source branch)
+print_status "$YELLOW" "Checking for forbidden merges (fullqa/develop into source branch)..."
+FORBIDDEN_MERGE_RESULT=$(check_forbidden_merges "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_DEFAULT_BRANCH")
+FORBIDDEN_MERGE_STATUS=$(echo "$FORBIDDEN_MERGE_RESULT" | cut -d'|' -f1)
+FORBIDDEN_MERGE_COMMITS=$(echo "$FORBIDDEN_MERGE_RESULT" | cut -d'|' -f2)
+
+if [[ "$FORBIDDEN_MERGE_STATUS" == "clean" ]]; then
+    print_status "$GREEN" "✓ No forbidden merges found (source branch does not merge fullqa/develop)"
+elif [[ "$FORBIDDEN_MERGE_STATUS" == "forbidden_merge" ]]; then
+    print_status "$RED" "✗ Forbidden merges detected! Source branch contains merge commits from fullqa/develop"
+    if [[ -n "$FORBIDDEN_MERGE_COMMITS" ]]; then
+        print_status "$RED" "  Offending commit(s): $FORBIDDEN_MERGE_COMMITS"
+    fi
+else
+    print_status "$YELLOW" "⚠ Could not check for forbidden merges"
+fi
+
+# Function to check for merge conflicts between source and target branch
+# Returns: "status|conflicted_files" format
+# status: "no_conflicts" if no conflicts, "acceptable_conflicts" if only manifest/package.xml, "conflicts" if other conflicts, "error" if unable to check
+check_merge_conflicts() {
+    local source_branch=$1
+    local target_branch=$2
+    local current_branch=""
+    local conflicted_files=()
+    
+    # Save current branch/HEAD position
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+    
+    # Check if source branch exists
+    if ! git show-ref --verify --quiet "refs/remotes/origin/$source_branch" 2>/dev/null; then
+        echo "error|Source branch not found"
+        return
+    fi
+    
+    # Check if target branch exists
+    if ! git show-ref --verify --quiet "refs/remotes/origin/$target_branch" 2>/dev/null; then
+        echo "error|Target branch not found"
+        return
+    fi
+    
+    # Checkout target branch (detached HEAD is fine for testing)
+    # This simulates merging source branch INTO target branch (main/default)
+    if ! git checkout -q "origin/$target_branch" 2>/dev/null; then
+        echo "error|Could not checkout target branch"
+        return
+    fi
+    
+    # Attempt merge with --no-commit and --no-ff to detect conflicts without committing
+    # Merge source branch INTO target branch (simulating the actual MR merge)
+    # Capture stderr to check for merge messages, but don't fail on merge conflicts
+    local merge_output
+    merge_output=$(git merge --no-commit --no-ff "origin/$source_branch" 2>&1)
+    local merge_exit_code=$?
+    
+    # Check if merge succeeded (exit code 0 means success, no conflicts)
+    if [[ $merge_exit_code -eq 0 ]]; then
+        # Merge succeeded, no conflicts
+        git merge --abort 2>/dev/null || true
+        # Restore original position
+        git checkout -q "$current_branch" 2>/dev/null || true
+        echo "no_conflicts|"
+        return
+    fi
+    
+    # Merge failed, check for conflicts
+    # Get list of unmerged (conflicted) files
+    # git ls-files -u shows unmerged files (conflicts)
+    local unmerged_files
+    unmerged_files=$(git ls-files -u 2>/dev/null | awk '{print $4}' | sort -u 2>/dev/null || echo "")
+    
+    # If no unmerged files found, check if we're in a merge state
+    if [[ -z "$unmerged_files" ]]; then
+        # Check if we're actually in a merge state
+        if [[ -f ".git/MERGE_HEAD" ]]; then
+            # We're in a merge state but no conflicts detected - this shouldn't happen
+            # Abort and return error
+            git merge --abort 2>/dev/null || true
+            git checkout -q "$current_branch" 2>/dev/null || true
+            echo "error|Merge failed but no conflicts detected"
+            return
+        else
+            # Not in merge state, might be a different error
+            git merge --abort 2>/dev/null || true
+            git checkout -q "$current_branch" 2>/dev/null || true
+            echo "error|Merge failed: $merge_output"
+            return
+        fi
+    fi
+    
+    # Check if conflicts are only in manifest/package.xml
+    local only_package_xml=true
+    while IFS= read -r file; do
+        if [[ -n "$file" ]]; then
+            conflicted_files+=("$file")
+            # If file is not manifest/package.xml, mark as not acceptable
+            if [[ "$file" != "manifest/package.xml" ]]; then
+                only_package_xml=false
+            fi
+        fi
+    done <<< "$unmerged_files"
+    
+    # Abort the merge
+    git merge --abort 2>/dev/null || true
+    
+    # Restore original position
+    git checkout -q "$current_branch" 2>/dev/null || true
+    
+    # Return results
+    if [[ "$only_package_xml" == "true" && ${#conflicted_files[@]} -gt 0 ]]; then
+        # Join conflicted files with comma
+        local files_str
+        files_str=$(IFS=','; echo "${conflicted_files[*]}")
+        echo "acceptable_conflicts|$files_str"
+    elif [[ ${#conflicted_files[@]} -gt 0 ]]; then
+        # Join conflicted files with comma
+        local files_str
+        files_str=$(IFS=','; echo "${conflicted_files[*]}")
+        echo "conflicts|$files_str"
+    else
+        echo "no_conflicts|"
+    fi
+}
+
+# Check for merge conflicts between source and target branch
+print_status "$YELLOW" "Checking for merge conflicts between source and target branch..."
+MERGE_CONFLICT_RESULT=$(check_merge_conflicts "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
+MERGE_CONFLICT_STATUS=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f1)
+MERGE_CONFLICT_FILES=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f2)
+
+if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
+    print_status "$GREEN" "✓ No merge conflicts between source and target branch"
+elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
+    print_status "$GREEN" "✓ Merge conflicts found, but only in manifest/package.xml (acceptable)"
+elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
+    print_status "$RED" "✗ Merge conflicts detected between source and target branch"
+    if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
+        print_status "$RED" "  Conflicted file(s): $MERGE_CONFLICT_FILES"
+    fi
+else
+    print_status "$YELLOW" "⚠ Could not check for merge conflicts: $MERGE_CONFLICT_FILES"
+fi
+
 # Check if source branch commits exist in fullqa and develop branches
 check_branch_merged() {
     local target_branch=$1
@@ -362,42 +658,106 @@ COMMENT_BODY="## Branch Deployment Verification
 
 "
 
+# Branch name check
+if [[ "$BRANCH_NAME_STATUS" == "valid" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Branch Name**: Source branch contains valid Jira project key"$'\n'
+elif [[ "$BRANCH_NAME_STATUS" == "invalid_bar" ]]; then
+    COMMENT_BODY+="- :x: **Branch Name**: Source branch contains BAR (release team project)"$'\n'
+else
+    COMMENT_BODY+="- :x: **Branch Name**: Source branch does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, avatechtdr)"$'\n'
+fi
+
+# Branch age check
+if [[ "$BRANCH_AGE_STATUS" == "recent" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Branch Age**: Source branch created from default branch $BRANCH_AGE_DAYS days ago (within 30 days)"$'\n'
+elif [[ "$BRANCH_AGE_STATUS" == "old" ]]; then
+    COMMENT_BODY+="- :x: **Branch Age**: Source branch created from default branch $BRANCH_AGE_DAYS days ago (over 30 days old)"$'\n'
+else
+    COMMENT_BODY+="- :warning: **Branch Age**: Could not determine branch age"$'\n'
+fi
+
+# Forbidden merge check
+if [[ "$FORBIDDEN_MERGE_STATUS" == "clean" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Forbidden Merges**: No merges from fullqa/develop into source branch"$'\n'
+elif [[ "$FORBIDDEN_MERGE_STATUS" == "forbidden_merge" ]]; then
+    if [[ -n "$FORBIDDEN_MERGE_COMMITS" ]]; then
+        # Format commit SHAs (first 8 chars) for display
+        commit_list=""
+        IFS=',' read -ra COMMITS <<< "$FORBIDDEN_MERGE_COMMITS"
+        for commit in "${COMMITS[@]}"; do
+            if [[ -n "$commit_list" ]]; then
+                commit_list+=", "
+            fi
+            commit_list+="\`${commit:0:8}\`"
+        done
+        COMMENT_BODY+="- :x: **Forbidden Merges**: Source branch contains merge commits from fullqa/develop (commit(s): $commit_list)"$'\n'
+    else
+        COMMENT_BODY+="- :x: **Forbidden Merges**: Source branch contains merge commits from fullqa/develop"$'\n'
+    fi
+else
+    COMMENT_BODY+="- :warning: **Forbidden Merges**: Could not check for forbidden merges"$'\n'
+fi
+
+# Merge conflict check
+if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: No conflicts between source and target branch"$'\n'
+elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: Conflicts found, but only in manifest/package.xml (acceptable)"$'\n'
+elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
+    if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
+        # Format file names for display
+        file_list=""
+        IFS=',' read -ra FILES <<< "$MERGE_CONFLICT_FILES"
+        for file in "${FILES[@]}"; do
+            if [[ -n "$file_list" ]]; then
+                file_list+=", "
+            fi
+            file_list+="\`$file\`"
+        done
+        COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch (file(s): $file_list)"$'\n'
+    else
+        COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch"$'\n'
+    fi
+else
+    COMMENT_BODY+="- :warning: **Merge Conflicts**: Could not check for merge conflicts"$'\n'
+fi
+
 # FullQA status
 if [[ "$FULLQA_EXISTS" == "true" ]]; then
     if [[ "$FULLQA_MERGED" == "true" ]]; then
         if [[ "$FULLQA_DEPLOY_STATUS" == "success" ]]; then
             if [[ -n "$FULLQA_DEPLOY_COMMIT" ]]; then
-                COMMENT_BODY+=":white_check_mark: **fullqa**: Merged and deployed successfully (commit: \`${FULLQA_DEPLOY_COMMIT:0:8}\`)"$'\n'
+                COMMENT_BODY+="- :white_check_mark: **fullqa**: Merged and deployed successfully (commit: \`${FULLQA_DEPLOY_COMMIT:0:8}\`)"$'\n'
             else
-                COMMENT_BODY+=":white_check_mark: **fullqa**: Merged and deployed successfully"$'\n'
+                COMMENT_BODY+="- :white_check_mark: **fullqa**: Merged and deployed successfully"$'\n'
             fi
             print_status "$GREEN" "✓ fullqa: Merged and deployed successfully"
         elif [[ "$FULLQA_DEPLOY_STATUS" == "failed" ]]; then
             if [[ -n "$FULLQA_DEPLOY_COMMIT" ]]; then
-                COMMENT_BODY+=":x: **fullqa**: Merged but deployment failed (commit: \`${FULLQA_DEPLOY_COMMIT:0:8}\`)"$'\n'
+                COMMENT_BODY+="- :x: **fullqa**: Merged but deployment failed (commit: \`${FULLQA_DEPLOY_COMMIT:0:8}\`)"$'\n'
             else
-                COMMENT_BODY+=":x: **fullqa**: Merged but deployment failed"$'\n'
+                COMMENT_BODY+="- :x: **fullqa**: Merged but deployment failed"$'\n'
             fi
             print_status "$RED" "✗ fullqa: Merged but deployment failed"
         elif [[ "$FULLQA_DEPLOY_STATUS" == "running" || "$FULLQA_DEPLOY_STATUS" == "pending" ]]; then
-            COMMENT_BODY+=":hourglass: **fullqa**: Merged, deployment in progress"$'\n'
+            COMMENT_BODY+="- :hourglass: **fullqa**: Merged, deployment in progress"$'\n'
             print_status "$YELLOW" "⏳ fullqa: Merged, deployment in progress"
         elif [[ "$FULLQA_DEPLOY_STATUS" == "job_not_found" ]]; then
-            COMMENT_BODY+=":warning: **fullqa**: Merged but deploy job not found"$'\n'
+            COMMENT_BODY+="- :warning: **fullqa**: Merged but deploy job not found"$'\n'
             print_status "$YELLOW" "⚠ fullqa: Merged but deploy job not found"
         elif [[ "$FULLQA_DEPLOY_STATUS" == "no_pipeline" ]]; then
-            COMMENT_BODY+=":warning: **fullqa**: Merged but no pipeline found"$'\n'
+            COMMENT_BODY+="- :warning: **fullqa**: Merged but no pipeline found"$'\n'
             print_status "$YELLOW" "⚠ fullqa: Merged but no pipeline found"
         else
-            COMMENT_BODY+=":question: **fullqa**: Merged, deployment status unknown ($FULLQA_DEPLOY_STATUS)"$'\n'
+            COMMENT_BODY+="- :question: **fullqa**: Merged, deployment status unknown ($FULLQA_DEPLOY_STATUS)"$'\n'
             print_status "$YELLOW" "? fullqa: Merged, deployment status unknown"
         fi
     else
-        COMMENT_BODY+=":x: **fullqa**: Not merged"$'\n'
+        COMMENT_BODY+="- :x: **fullqa**: Not merged"$'\n'
         print_status "$RED" "✗ fullqa: Not merged"
     fi
 else
-    COMMENT_BODY+=":warning: **fullqa**: Branch does not exist"$'\n'
+    COMMENT_BODY+="- :warning: **fullqa**: Branch does not exist"$'\n'
     print_status "$YELLOW" "⚠ fullqa: Branch does not exist"
 fi
 
@@ -406,37 +766,37 @@ if [[ "$DEVELOP_EXISTS" == "true" ]]; then
     if [[ "$DEVELOP_MERGED" == "true" ]]; then
         if [[ "$DEVELOP_DEPLOY_STATUS" == "success" ]]; then
             if [[ -n "$DEVELOP_DEPLOY_COMMIT" ]]; then
-                COMMENT_BODY+=":white_check_mark: **develop**: Merged and deployed successfully (commit: \`${DEVELOP_DEPLOY_COMMIT:0:8}\`)"$'\n'
+                COMMENT_BODY+="- :white_check_mark: **develop**: Merged and deployed successfully (commit: \`${DEVELOP_DEPLOY_COMMIT:0:8}\`)"$'\n'
             else
-                COMMENT_BODY+=":white_check_mark: **develop**: Merged and deployed successfully"$'\n'
+                COMMENT_BODY+="- :white_check_mark: **develop**: Merged and deployed successfully"$'\n'
             fi
             print_status "$GREEN" "✓ develop: Merged and deployed successfully"
         elif [[ "$DEVELOP_DEPLOY_STATUS" == "failed" ]]; then
             if [[ -n "$DEVELOP_DEPLOY_COMMIT" ]]; then
-                COMMENT_BODY+=":x: **develop**: Merged but deployment failed (commit: \`${DEVELOP_DEPLOY_COMMIT:0:8}\`)"$'\n'
+                COMMENT_BODY+="- :x: **develop**: Merged but deployment failed (commit: \`${DEVELOP_DEPLOY_COMMIT:0:8}\`)"$'\n'
             else
-                COMMENT_BODY+=":x: **develop**: Merged but deployment failed"$'\n'
+                COMMENT_BODY+="- :x: **develop**: Merged but deployment failed"$'\n'
             fi
             print_status "$RED" "✗ develop: Merged but deployment failed"
         elif [[ "$DEVELOP_DEPLOY_STATUS" == "running" || "$DEVELOP_DEPLOY_STATUS" == "pending" ]]; then
-            COMMENT_BODY+=":hourglass: **develop**: Merged, deployment in progress"$'\n'
+            COMMENT_BODY+="- :hourglass: **develop**: Merged, deployment in progress"$'\n'
             print_status "$YELLOW" "⏳ develop: Merged, deployment in progress"
         elif [[ "$DEVELOP_DEPLOY_STATUS" == "job_not_found" ]]; then
-            COMMENT_BODY+=":warning: **develop**: Merged but deploy job not found"$'\n'
+            COMMENT_BODY+="- :warning: **develop**: Merged but deploy job not found"$'\n'
             print_status "$YELLOW" "⚠ develop: Merged but deploy job not found"
         elif [[ "$DEVELOP_DEPLOY_STATUS" == "no_pipeline" ]]; then
-            COMMENT_BODY+=":warning: **develop**: Merged but no pipeline found"$'\n'
+            COMMENT_BODY+="- :warning: **develop**: Merged but no pipeline found"$'\n'
             print_status "$YELLOW" "⚠ develop: Merged but no pipeline found"
         else
-            COMMENT_BODY+=":question: **develop**: Merged, deployment status unknown ($DEVELOP_DEPLOY_STATUS)"$'\n'
+            COMMENT_BODY+="- :question: **develop**: Merged, deployment status unknown ($DEVELOP_DEPLOY_STATUS)"$'\n'
             print_status "$YELLOW" "? develop: Merged, deployment status unknown"
         fi
     else
-        COMMENT_BODY+=":x: **develop**: Not merged"$'\n'
+        COMMENT_BODY+="- :x: **develop**: Not merged"$'\n'
         print_status "$RED" "✗ develop: Not merged"
     fi
 else
-    COMMENT_BODY+=":warning: **develop**: Branch does not exist"$'\n'
+    COMMENT_BODY+="- :warning: **develop**: Branch does not exist"$'\n'
     print_status "$YELLOW" "⚠ develop: Branch does not exist"
 fi
 

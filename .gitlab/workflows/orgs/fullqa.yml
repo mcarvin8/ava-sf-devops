@@ -71,7 +71,7 @@ merge:fullqa:
   resource_group: merge-fullqa
   needs: []
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'ContPar' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa'
       when: manual
