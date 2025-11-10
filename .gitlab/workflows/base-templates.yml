@@ -29,11 +29,6 @@
       coverage_report:
         coverage_format: cobertura
         path: coverage-cobertura.xml
-  cache:
-    key: ${CI_MERGE_REQUEST_TARGET_BRANCH_NAME}
-    paths:
-      - .sf/
-      - .sfdx/
   script:
     - if [ "$testclasses" != "not a test" ];
       then echo y | sf plugins install apex-code-coverage-transformer@latest;
