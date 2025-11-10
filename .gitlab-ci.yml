@@ -7,16 +7,6 @@
 image: $CI_REGISTRY_IMAGE:production
 
 ####################################################
-# Cache sf and sfdx modules between jobs.
-# https://docs.gitlab.com/ee/ci/yaml/README.html#cache
-####################################################
-cache:
-  key: ${CI_COMMIT_REF_NAME}
-  paths:
-    - .sf/
-    - .sfdx/
-
-####################################################
 # Include external and local pipeline files for better organization.
 ####################################################
 include:
