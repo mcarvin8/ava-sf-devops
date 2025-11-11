@@ -66,6 +66,8 @@ print_status "$YELLOW" "Merge Request IID: $CI_MERGE_REQUEST_IID"
 # Fetch all branches to ensure we have the latest information
 print_status "$YELLOW" "Fetching all branches..."
 git fetch --all --quiet
+git config user.name "${MAINTAINER_PAT_NAME}"
+git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
 
 # Get the latest commit SHA from the source branch
 SOURCE_BRANCH_SHA=$(git rev-parse "origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>/dev/null || echo "")
