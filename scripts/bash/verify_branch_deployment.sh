@@ -510,6 +510,26 @@ DEVELOP_MERGE_COMMIT=$(echo "$DEVELOP_RESULT" | cut -d'|' -f3)
 # Remove trailing slash from CI_SERVER_HOST for API calls
 CI_SERVER_HOST_CLEAN=$(echo "$CI_SERVER_HOST" | sed 's|/$||')
 
+# Check production validation job status (test:predeploy:prd) for the source branch commit
+print_status "$YELLOW" "Checking production validation job (test:predeploy:prd) for source branch commit..."
+PREDEPLOY_PRD_STATUS=$(check_deployment_job_status "$SOURCE_BRANCH_SHA" "test:predeploy:prd" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST_CLEAN")
+
+if [[ "$PREDEPLOY_PRD_STATUS" == "success" ]]; then
+    print_status "$GREEN" "✓ Production validation (test:predeploy:prd) passed"
+elif [[ "$PREDEPLOY_PRD_STATUS" == "failed" ]]; then
+    print_status "$RED" "✗ Production validation (test:predeploy:prd) failed"
+elif [[ "$PREDEPLOY_PRD_STATUS" == "running" || "$PREDEPLOY_PRD_STATUS" == "pending" ]]; then
+    print_status "$YELLOW" "⏳ Production validation (test:predeploy:prd) in progress"
+elif [[ "$PREDEPLOY_PRD_STATUS" == "job_not_found" ]]; then
+    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) job not found"
+elif [[ "$PREDEPLOY_PRD_STATUS" == "no_pipeline" ]]; then
+    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) - no pipeline found"
+elif [[ "$PREDEPLOY_PRD_STATUS" == "api_error" ]]; then
+    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) - API error"
+else
+    print_status "$YELLOW" "? Production validation (test:predeploy:prd) status unknown ($PREDEPLOY_PRD_STATUS)"
+fi
+
 # Function to find commits with successful deploy jobs
 # Checks multiple commits that contain the source SHA until we find one with a successful deploy
 # Returns: "status|commit_sha" format
@@ -722,6 +742,23 @@ elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
     fi
 else
     COMMENT_BODY+="- :warning: **Merge Conflicts**: Could not check for merge conflicts"$'\n'
+fi
+
+# Production validation check
+if [[ "$PREDEPLOY_PRD_STATUS" == "success" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Production Validation**: test:predeploy:prd job passed"$'\n'
+elif [[ "$PREDEPLOY_PRD_STATUS" == "failed" ]]; then
+    COMMENT_BODY+="- :x: **Production Validation**: test:predeploy:prd job failed"$'\n'
+elif [[ "$PREDEPLOY_PRD_STATUS" == "running" || "$PREDEPLOY_PRD_STATUS" == "pending" ]]; then
+    COMMENT_BODY+="- :hourglass: **Production Validation**: test:predeploy:prd job in progress"$'\n'
+elif [[ "$PREDEPLOY_PRD_STATUS" == "job_not_found" ]]; then
+    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd job not found"$'\n'
+elif [[ "$PREDEPLOY_PRD_STATUS" == "no_pipeline" ]]; then
+    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd - no pipeline found"$'\n'
+elif [[ "$PREDEPLOY_PRD_STATUS" == "api_error" ]]; then
+    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd - API error"$'\n'
+else
+    COMMENT_BODY+="- :question: **Production Validation**: test:predeploy:prd status unknown ($PREDEPLOY_PRD_STATUS)"$'\n'
 fi
 
 # FullQA status
