@@ -78,6 +78,18 @@ fi
 
 print_status "$YELLOW" "Source branch SHA: $SOURCE_BRANCH_SHA"
 
+# Save current branch/HEAD position for later restoration (needed for package check)
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
+
+# Package check settings
+PACKAGE_CHECK_STAGE="deploy"  # deploy or destroy
+PACKAGE_CHECK_ENVIRONMENT="production"  # production or sandbox
+PACKAGE_XML_PATH="manifest/package.xml"
+PACKAGE_CHECK_SCRIPT="scripts/python/package_check.py"
+PACKAGE_CHECK_STATUS=""
+PACKAGE_CHECK_OUTPUT=""
+PACKAGE_CHECK_WARNINGS=""
+
 # Function to check how old the source branch is relative to the default branch
 # Returns: "status|age_days|merge_base_sha" format
 # status: "recent" if <= 30 days, "old" if > 30 days, "error" if unable to determine
@@ -373,6 +385,108 @@ elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
 else
     print_status "$YELLOW" "⚠ Could not check for merge conflicts: $MERGE_CONFLICT_FILES"
 fi
+
+# ============================================================================
+# PACKAGE.XML CHECK
+# ============================================================================
+print_status "$YELLOW" ""
+print_status "$YELLOW" "=== Running Package.xml Compliance Check ==="
+
+# Checkout the latest commit on the source branch for package check
+print_status "$YELLOW" "Checking out latest commit on source branch ($SOURCE_BRANCH_SHA) for package check..."
+if ! git rev-parse --verify "$SOURCE_BRANCH_SHA" >/dev/null 2>&1; then
+    print_status "$RED" "Error: Source branch commit $SOURCE_BRANCH_SHA no longer available"
+    git checkout -q "$CURRENT_BRANCH" 2>/dev/null || true
+    exit 1
+fi
+
+# Checkout source branch commit
+if ! git checkout -q "$SOURCE_BRANCH_SHA" 2>/dev/null; then
+    print_status "$RED" "Error: Could not checkout source branch commit $SOURCE_BRANCH_SHA"
+    git checkout -q "$CURRENT_BRANCH" 2>/dev/null || true
+    exit 1
+fi
+
+# Verify we're on the correct commit
+CURRENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "")
+if [[ "$CURRENT_SHA" != "$SOURCE_BRANCH_SHA" ]]; then
+    print_status "$RED" "Error: Failed to checkout source branch commit. Expected $SOURCE_BRANCH_SHA, got $CURRENT_SHA"
+    git checkout -q "$CURRENT_BRANCH" 2>/dev/null || true
+    exit 1
+fi
+print_status "$GREEN" "✓ Checked out source branch commit $SOURCE_BRANCH_SHA"
+
+# Check if package.xml exists
+if [[ ! -f "$PACKAGE_XML_PATH" ]]; then
+    print_status "$RED" "✗ Package.xml not found at $PACKAGE_XML_PATH"
+    PACKAGE_CHECK_STATUS="error"
+    PACKAGE_CHECK_OUTPUT="Package.xml file not found"
+else
+    print_status "$YELLOW" "Found package.xml at $PACKAGE_XML_PATH"
+    
+    # Check if package_check.py script exists
+    if [[ ! -f "$PACKAGE_CHECK_SCRIPT" ]]; then
+        print_status "$RED" "✗ Package check script not found at $PACKAGE_CHECK_SCRIPT"
+        PACKAGE_CHECK_STATUS="error"
+        PACKAGE_CHECK_OUTPUT="Package check script not found"
+    else
+        # Check if python3 is available
+        if ! command -v python3 &> /dev/null; then
+            print_status "$RED" "✗ python3 not found in PATH"
+            PACKAGE_CHECK_STATUS="error"
+            PACKAGE_CHECK_OUTPUT="python3 not available"
+        else
+            # Run package_check.py
+            print_status "$YELLOW" "Running package_check.py..."
+            print_status "$YELLOW" "  Manifest: $PACKAGE_XML_PATH"
+            print_status "$YELLOW" "  Stage: $PACKAGE_CHECK_STAGE"
+            print_status "$YELLOW" "  Environment: $PACKAGE_CHECK_ENVIRONMENT"
+            
+            # Capture both stdout and stderr
+            PACKAGE_CHECK_OUTPUT=$(python3 "$PACKAGE_CHECK_SCRIPT" \
+                -x "$PACKAGE_XML_PATH" \
+                -s "$PACKAGE_CHECK_STAGE" \
+                -e "$PACKAGE_CHECK_ENVIRONMENT" 2>&1)
+            PACKAGE_CHECK_EXIT_CODE=$?
+            
+            # Extract warnings from output (especially test annotation warnings)
+            PACKAGE_CHECK_WARNINGS=$(echo "$PACKAGE_CHECK_OUTPUT" | grep -i "WARNING:" || echo "")
+            
+            if [[ $PACKAGE_CHECK_EXIT_CODE -eq 0 ]]; then
+                print_status "$GREEN" "✓ Package.xml compliance check passed"
+                print_status "$YELLOW" "Package check output:"
+                echo "$PACKAGE_CHECK_OUTPUT" | while IFS= read -r line; do
+                    # Highlight warnings in yellow
+                    if echo "$line" | grep -qi "WARNING:"; then
+                        print_status "$YELLOW" "  ⚠ $line"
+                    else
+                        print_status "$YELLOW" "  $line"
+                    fi
+                done
+                
+                # Show warnings separately if present
+                if [[ -n "$PACKAGE_CHECK_WARNINGS" ]]; then
+                    print_status "$YELLOW" "⚠ Package check completed with warnings:"
+                    echo "$PACKAGE_CHECK_WARNINGS" | while IFS= read -r warning; do
+                        print_status "$YELLOW" "  $warning"
+                    done
+                fi
+                PACKAGE_CHECK_STATUS="success"
+            else
+                print_status "$RED" "✗ Package.xml compliance check failed"
+                print_status "$RED" "Package check output:"
+                echo "$PACKAGE_CHECK_OUTPUT" | while IFS= read -r line; do
+                    print_status "$RED" "  $line"
+                done
+                PACKAGE_CHECK_STATUS="failed"
+            fi
+        fi
+    fi
+fi
+
+# Restore original branch position
+print_status "$YELLOW" "Restoring original branch position..."
+git checkout -q "$CURRENT_BRANCH" 2>/dev/null || true
 
 # Check if source branch commits exist in fullqa and develop branches
 check_branch_merged() {
@@ -761,6 +875,89 @@ else
     COMMENT_BODY+="- :question: **Production Validation**: test:predeploy:prd status unknown ($PREDEPLOY_PRD_STATUS)"$'\n'
 fi
 
+# Package.xml compliance check
+if [[ "$PACKAGE_CHECK_STATUS" == "success" ]]; then
+    # Extract test classes from output (package_check.py prints test classes as last line via print())
+    # Get the last line and trim whitespace
+    TEST_CLASSES=$(echo "$PACKAGE_CHECK_OUTPUT" | tail -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    
+    # Check if there are warnings (especially test annotation warnings)
+    if [[ -n "$PACKAGE_CHECK_WARNINGS" ]]; then
+        # Count test annotation related warnings
+        TEST_ANNOTATION_WARNINGS=$(echo "$PACKAGE_CHECK_WARNINGS" | grep -i "test annotation\|test class" || echo "")
+        
+        if [[ -n "$TEST_CLASSES" && "$TEST_CLASSES" != "not a test" && "$TEST_CLASSES" != *"ERROR"* && "$TEST_CLASSES" != *"Apex Tests"* ]]; then
+            # Format test classes for display (limit length if too long)
+            if [[ ${#TEST_CLASSES} -gt 100 ]]; then
+                TEST_CLASSES_SHORT="${TEST_CLASSES:0:97}..."
+                COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed (Test classes: \`$TEST_CLASSES_SHORT\`)"$'\n'
+            else
+                COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed (Test classes: \`$TEST_CLASSES\`)"$'\n'
+            fi
+        else
+            COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed"$'\n'
+        fi
+        
+        # Add warnings section - prioritize test annotation warnings
+        if [[ -n "$TEST_ANNOTATION_WARNINGS" ]]; then
+            COMMENT_BODY+="  - :warning: **Test Annotation Warnings**: "$'\n'
+            # Build warnings list using process substitution to avoid subshell issues
+            WARNINGS_LIST=""
+            while IFS= read -r warning; do
+                # Clean up warning message for display (remove "WARNING:" prefix if present)
+                CLEAN_WARNING=$(echo "$warning" | sed 's/^[[:space:]]*WARNING:[[:space:]]*//i' | cut -c1-150)
+                if [[ -n "$CLEAN_WARNING" ]]; then
+                    if [[ -n "$WARNINGS_LIST" ]]; then
+                        WARNINGS_LIST+=$'\n'
+                    fi
+                    WARNINGS_LIST+="    - \`$CLEAN_WARNING\`"
+                fi
+            done <<< "$TEST_ANNOTATION_WARNINGS"
+            COMMENT_BODY+="$WARNINGS_LIST"$'\n'
+        fi
+        
+        # Add other warnings if any
+        OTHER_WARNINGS=$(echo "$PACKAGE_CHECK_WARNINGS" | grep -vi "test annotation\|test class" || echo "")
+        if [[ -n "$OTHER_WARNINGS" ]]; then
+            COMMENT_BODY+="  - :warning: **Other Warnings**: "$'\n'
+            WARNINGS_LIST=""
+            while IFS= read -r warning; do
+                CLEAN_WARNING=$(echo "$warning" | sed 's/^[[:space:]]*WARNING:[[:space:]]*//i' | cut -c1-150)
+                if [[ -n "$CLEAN_WARNING" ]]; then
+                    if [[ -n "$WARNINGS_LIST" ]]; then
+                        WARNINGS_LIST+=$'\n'
+                    fi
+                    WARNINGS_LIST+="    - \`$CLEAN_WARNING\`"
+                fi
+            done <<< "$OTHER_WARNINGS"
+            COMMENT_BODY+="$WARNINGS_LIST"$'\n'
+        fi
+    else
+        # No warnings - standard success message
+        if [[ -n "$TEST_CLASSES" && "$TEST_CLASSES" != "not a test" && "$TEST_CLASSES" != *"ERROR"* && "$TEST_CLASSES" != *"Apex Tests"* ]]; then
+            # Format test classes for display (limit length if too long)
+            if [[ ${#TEST_CLASSES} -gt 100 ]]; then
+                TEST_CLASSES_SHORT="${TEST_CLASSES:0:97}..."
+                COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed (Test classes: \`$TEST_CLASSES_SHORT\`)"$'\n'
+            else
+                COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed (Test classes: \`$TEST_CLASSES\`)"$'\n'
+            fi
+        else
+            COMMENT_BODY+="- :white_check_mark: **Package.xml Compliance**: Check passed"$'\n'
+        fi
+    fi
+elif [[ "$PACKAGE_CHECK_STATUS" == "failed" ]]; then
+    # Extract error message (first error line, limit length)
+    ERROR_MSG=$(echo "$PACKAGE_CHECK_OUTPUT" | grep -i "ERROR" | head -1 | cut -c1-200 || echo "Package.xml compliance check failed")
+    COMMENT_BODY+="- :x: **Package.xml Compliance**: Check failed - $ERROR_MSG"$'\n'
+elif [[ "$PACKAGE_CHECK_STATUS" == "error" ]]; then
+    # Limit error message length for display
+    ERROR_DISPLAY=$(echo "$PACKAGE_CHECK_OUTPUT" | cut -c1-200 || echo "$PACKAGE_CHECK_OUTPUT")
+    COMMENT_BODY+="- :warning: **Package.xml Compliance**: Could not perform check - $ERROR_DISPLAY"$'\n'
+else
+    COMMENT_BODY+="- :warning: **Package.xml Compliance**: Check status unknown"$'\n'
+fi
+
 # FullQA status
 if [[ "$FULLQA_EXISTS" == "true" ]]; then
     if [[ "$FULLQA_MERGED" == "true" ]]; then
@@ -842,6 +1039,102 @@ fi
 COMMENT_BODY+=$'\n'"---"$'\n'
 COMMENT_BODY+="*This verification was performed automatically by the CI/CD pipeline.*"
 
+# GitLab API base URL for merge request notes
+API_URL="https://${CI_SERVER_HOST_CLEAN}/api/v4/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
+
+# ============================================================================
+# DELETE PREVIOUS COMMENTS FROM THE SAME USER
+# ============================================================================
+print_status "$YELLOW" "Checking for previous verification comments to delete..."
+
+# Get the current user ID from the PAT
+CURRENT_USER_RESPONSE=$(curl -s -w "\n%{http_code}" \
+    -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
+    "https://${CI_SERVER_HOST_CLEAN}/api/v4/user" 2>&1)
+
+CURRENT_USER_BODY=$(echo "$CURRENT_USER_RESPONSE" | sed '$d')
+CURRENT_USER_STATUS=$(echo "$CURRENT_USER_RESPONSE" | tail -n1)
+
+CURRENT_USER_ID=""
+CURRENT_USER_NAME=""
+if [[ "$CURRENT_USER_STATUS" -ge 200 && "$CURRENT_USER_STATUS" -lt 300 ]]; then
+    if command -v jq &> /dev/null; then
+        CURRENT_USER_ID=$(echo "$CURRENT_USER_BODY" | jq -r '.id // empty')
+        CURRENT_USER_NAME=$(echo "$CURRENT_USER_BODY" | jq -r '.username // empty')
+    else
+        # Fallback: extract user ID with grep/sed
+        CURRENT_USER_ID=$(echo "$CURRENT_USER_BODY" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
+    fi
+    print_status "$YELLOW" "Current user ID: $CURRENT_USER_ID ($CURRENT_USER_NAME)"
+else
+    print_status "$YELLOW" "⚠ Could not determine current user ID (HTTP $CURRENT_USER_STATUS)"
+fi
+
+# If we have a user ID, fetch and delete previous comments
+if [[ -n "$CURRENT_USER_ID" ]]; then
+    # Fetch all notes/comments on the MR
+    NOTES_RESPONSE=$(curl -s -w "\n%{http_code}" \
+        -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
+        "${API_URL}?per_page=100" 2>&1)
+    
+    NOTES_BODY=$(echo "$NOTES_RESPONSE" | sed '$d')
+    NOTES_STATUS=$(echo "$NOTES_RESPONSE" | tail -n1)
+    
+    if [[ "$NOTES_STATUS" -ge 200 && "$NOTES_STATUS" -lt 300 ]]; then
+        # Find notes by the current user that contain our verification header
+        DELETED_COUNT=0
+        
+        if command -v jq &> /dev/null; then
+            # Use jq to find notes from current user that contain "Branch Deployment Verification"
+            # Use --argjson for safe variable passing on Windows/Git Bash
+            # Use tr -d '\r' to remove Windows carriage returns
+            NOTE_IDS=$(echo "$NOTES_BODY" | jq -r --argjson uid "$CURRENT_USER_ID" '.[] | select(.author.id == $uid) | select(.body | contains("Branch Deployment Verification")) | .id' 2>/dev/null | tr -d '\r' || echo "")
+            
+            if [[ -n "$NOTE_IDS" ]]; then
+                while IFS= read -r note_id; do
+                    # Strip carriage returns that may appear on Windows
+                    note_id=$(echo "$note_id" | tr -d '\r')
+                    if [[ -n "$note_id" && "$note_id" != "null" ]]; then
+                        print_status "$YELLOW" "  Deleting previous comment ID: $note_id"
+                        
+                        DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+                            -X DELETE \
+                            -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
+                            "${API_URL}/${note_id}" 2>&1)
+                        
+                        DELETE_STATUS=$(echo "$DELETE_RESPONSE" | tail -n1)
+                        
+                        if [[ "$DELETE_STATUS" -ge 200 && "$DELETE_STATUS" -lt 300 ]] || [[ "$DELETE_STATUS" == "204" ]]; then
+                            ((DELETED_COUNT++))
+                            print_status "$GREEN" "    ✓ Deleted comment $note_id"
+                        else
+                            print_status "$YELLOW" "    ⚠ Failed to delete comment $note_id (HTTP $DELETE_STATUS)"
+                        fi
+                    fi
+                done <<< "$NOTE_IDS"
+            fi
+        else
+            # Fallback without jq - basic pattern matching
+            # This is less reliable but works for simple cases
+            print_status "$YELLOW" "  ⚠ jq not available, skipping comment deletion"
+        fi
+        
+        if [[ $DELETED_COUNT -gt 0 ]]; then
+            print_status "$GREEN" "✓ Deleted $DELETED_COUNT previous verification comment(s)"
+        else
+            print_status "$YELLOW" "No previous verification comments found to delete"
+        fi
+    else
+        print_status "$YELLOW" "⚠ Could not fetch existing comments (HTTP $NOTES_STATUS)"
+    fi
+else
+    print_status "$YELLOW" "⚠ Skipping comment deletion - could not determine user ID"
+fi
+
+# ============================================================================
+# POST NEW COMMENT
+# ============================================================================
+
 # Prepare JSON payload for GitLab API
 # Use jq if available for proper JSON encoding, otherwise use printf
 if command -v jq &> /dev/null; then
@@ -852,10 +1145,7 @@ else
     JSON_PAYLOAD="{\"body\":\"$ESCAPED_BODY\"}"
 fi
 
-# GitLab API endpoint for posting a comment to a merge request
-API_URL="https://${CI_SERVER_HOST_CLEAN}/api/v4/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
-
-print_status "$YELLOW" "Posting comment to merge request..."
+print_status "$YELLOW" "Posting new comment to merge request..."
 print_status "$YELLOW" "API URL: $API_URL"
 
 # Post comment to GitLab MR using project access token
