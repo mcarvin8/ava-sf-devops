@@ -43,7 +43,7 @@ stages:
 ####################################################
 variables:
   DEPLOY_PACKAGE: "manifest/package.xml"
-  DEPLOY_TIMEOUT: 240
+  DEPLOY_TIMEOUT: 120
   GT_ANNOTATION_PROJECT: it-crm
   GT_ANNOTATION_ROLE: app
   GT_ANNOTATION_SERVICE: it-business-process
