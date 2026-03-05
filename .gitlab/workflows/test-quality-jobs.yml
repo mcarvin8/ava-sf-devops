@@ -65,7 +65,7 @@ pmd-code-check:
   cache: []
   variables:
     PMD_VERSION: "7.16.0"
-    RULESET_FILES: "scripts/pmd/apexruleset.xml,scripts/pmd/require_cmt_switch.xml"
+    RULESET_FILES: "scripts/pmd/enforced/default_apex.xml,scripts/pmd/encouraged/require_cmt_switch.xml"
     PMD_REPORT: "pmd-report.xml"
   rules:
     - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
