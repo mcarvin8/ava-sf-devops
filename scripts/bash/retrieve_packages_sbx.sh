@@ -28,8 +28,9 @@ do
     cp -f "scripts/packages/$PACKAGE_NAME" "manifest/package.xml"
     echo "Retrieving metadata defined in $PACKAGE_NAME from $branch_name..."
     sf project retrieve start --manifest manifest/package.xml --target-org $branch_name --ignore-conflicts --wait $DEPLOY_TIMEOUT
-    # Check if there are changes in the "force-app" folder
-    if git diff --ignore-cr-at-eol --name-only | grep '^force-app/'; then
+    # Normalize line-endings from CR/LF to LF first
+    git add --renormalize force-app/ 2>/dev/null || true
+    if [[ -n $(git status --porcelain force-app/) ]]; then
         echo "Changes found in the force-app directory..."
         git add force-app
         git commit -m "Retrieve latest metadata defined in $PACKAGE_NAME from $branch_name"

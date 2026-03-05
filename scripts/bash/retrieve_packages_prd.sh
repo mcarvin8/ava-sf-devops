@@ -26,33 +26,39 @@ git pull --ff -q
 mkdir -p manifest
 cp -f "scripts/packages/$PACKAGE_NAME" "manifest/package.xml"
 
-# Function to map metadata types to force-app folder names
+# Function to map metadata types to force-app folder names using metadataRegistry.json
 get_folder_for_metadata_type() {
     local metadata_type=$1
-    case $metadata_type in
-        ApexClass) echo "classes" ;;
-        ApexComponent) echo "components" ;;
-        ApexPage) echo "pages" ;;
-        ApexTrigger) echo "triggers" ;;
-        AuraDefinitionBundle) echo "aura" ;;
-        Bot) echo "bots" ;;
-        CustomApplication) echo "applications" ;;
-        CustomLabel) echo "labels" ;;
-        CustomLabels) echo "labels" ;;
-        CustomObject) echo "objects" ;;
-        CustomPermission) echo "customPermissions" ;;
-        DuplicateRule) echo "duplicateRules" ;;
-        FlexiPage) echo "flexipages" ;;
-        Flow) echo "flows" ;;
-        GlobalValueSet) echo "globalValueSets" ;;
-        Layout) echo "layouts" ;;
-        LightningComponentBundle) echo "lwc" ;;
-        PathAssistant) echo "pathAssistants" ;;
-        PermissionSet) echo "permissionsets" ;;
-        Profile) echo "profiles" ;;
-        StandardValueSet) echo "standardValueSets" ;;
-        *) echo "" ;;
-    esac
+    local registry_file="scripts/bash/metadataRegistry.json"
+    
+    # Check if registry file exists
+    if [[ ! -f "$registry_file" ]]; then
+        echo ""
+        return
+    fi
+    
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "Warning: jq not found, cannot lookup metadata type folder. Falling back to empty string." >&2
+        echo ""
+        return
+    fi
+    
+    # Look up the metadata type in the registry JSON
+    # Search for a type where the name field matches (case-insensitive)
+    local folder_name
+    folder_name=$(jq -r --arg type "$metadata_type" '
+        .types | to_entries[] | 
+        select((.value.name | ascii_downcase) == ($type | ascii_downcase)) | 
+        .value.directoryName
+    ' "$registry_file" 2>/dev/null | head -1)
+    
+    # Return the folder name if found, otherwise empty string
+    if [[ -n "$folder_name" && "$folder_name" != "null" ]]; then
+        echo "$folder_name"
+    else
+        echo ""
+    fi
 }
 
 # Pre-purge folders based on metadata types in package.xml
@@ -82,8 +88,9 @@ fi
 
 echo "Retrieving metadata defined in $PACKAGE_NAME from production..."
 sf project retrieve start --manifest manifest/package.xml --ignore-conflicts --wait $DEPLOY_TIMEOUT
-# Check if there are changes in the "force-app" folder
-if git diff --ignore-cr-at-eol --name-only | grep '^force-app/'; then
+# Normalize line-endings from CR/LF to LF first
+git add --renormalize force-app/ 2>/dev/null || true
+if [[ -n $(git status --porcelain force-app/) ]]; then
     echo "Changes found in the force-app directory..."
     git add force-app
     git commit -m "Retrieve latest production metadata defined in $PACKAGE_NAME"

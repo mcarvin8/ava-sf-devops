@@ -1,7 +1,7 @@
 #!/bin/bash
 ################################################################################
 # Script: delete_stale_pipelines.sh
-# Description: Deletes old GitLab CI/CD pipelines that are older than 6 months
+# Description: Deletes old GitLab CI/CD pipelines that are older than 1 months
 #              to reduce clutter and storage usage. Uses GitLab REST API to 
 #              fetch and delete pipelines in batches.
 # Usage: Called from scheduled CI/CD pipeline
@@ -12,7 +12,7 @@
 ################################################################################
 page=1
 per_page=100
-updated_before=$(date -d "6 months ago" +%Y-%m-%d)
+updated_before=$(date -d "1 months ago" +%Y-%m-%d)
 json_file="pipelines.json"
 txt_file="pipeline-rest-api-ids.txt"
 
