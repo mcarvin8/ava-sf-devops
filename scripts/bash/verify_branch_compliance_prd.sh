@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# Script: verify_branch_deployment.sh
+# Script: verify_branch_compliance_prd.sh
 # Description: Verifies if the source branch in a merge request (open against
 #              the default branch) has been successfully merged & deployed into
 #              fullqa and develop branches. Posts a comment to the MR with the
@@ -8,6 +8,7 @@
 # Usage: Called automatically from GitLab CI/CD pipeline
 # Dependencies: git, curl, jq (optional, for JSON parsing)
 # Environment Variables Required:
+#   - CI_COMMIT_SHA: Commit that triggered the pipeline (avoids race when new commits are pushed)
 #   - CI_MERGE_REQUEST_IID: Merge request IID
 #   - CI_MERGE_REQUEST_SOURCE_BRANCH_NAME: Source branch name
 #   - CI_MERGE_REQUEST_TARGET_BRANCH_NAME: Target branch name (should be default)
@@ -15,7 +16,7 @@
 #   - CI_SERVER_HOST: GitLab server host
 #   - CI_PROJECT_PATH: Project path (e.g., group/project)
 #   - MAINTAINER_PAT_VALUE: Project access token for API authentication
-#   - CI_DEFAULT_BRANCH: Default branch name (e.g., main, master)
+#   - CI_DEFAULT_BRANCH: Default branch name (e.g., main)
 ################################################################################
 set -euo pipefail
 
@@ -43,6 +44,7 @@ check_required_var() {
 
 # Validate required environment variables
 print_status "$YELLOW" "Validating required environment variables..."
+check_required_var "CI_COMMIT_SHA"
 check_required_var "CI_MERGE_REQUEST_IID"
 check_required_var "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
 check_required_var "CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
@@ -69,14 +71,15 @@ git fetch --all --quiet
 git config user.name "${MAINTAINER_PAT_NAME}"
 git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
 
-# Get the latest commit SHA from the source branch
-SOURCE_BRANCH_SHA=$(git rev-parse "origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>/dev/null || echo "")
-if [[ -z "$SOURCE_BRANCH_SHA" ]]; then
-    print_status "$RED" "Error: Could not find source branch origin/$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
+# Use CI_COMMIT_SHA (commit that triggered this pipeline) to avoid race condition:
+# if a user pushes a new commit while this pipeline runs, we must verify THIS commit, not the latest.
+SOURCE_BRANCH_SHA="${CI_COMMIT_SHA}"
+if ! git rev-parse --verify "$SOURCE_BRANCH_SHA" >/dev/null 2>&1; then
+    print_status "$RED" "Error: Commit $SOURCE_BRANCH_SHA (CI_COMMIT_SHA) not found in repository"
     exit 1
 fi
 
-print_status "$YELLOW" "Source branch SHA: $SOURCE_BRANCH_SHA"
+print_status "$YELLOW" "Source commit SHA: $SOURCE_BRANCH_SHA (pipeline-triggered commit)"
 
 # Save current branch/HEAD position for later restoration (needed for package check)
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "HEAD")
@@ -90,17 +93,18 @@ PACKAGE_CHECK_STATUS=""
 PACKAGE_CHECK_OUTPUT=""
 PACKAGE_CHECK_WARNINGS=""
 
-# Function to check how old the source branch is relative to the default branch
+# Function to check how old the source commit is relative to the default branch
 # Returns: "status|age_days|merge_base_sha" format
 # status: "recent" if <= 30 days, "old" if > 30 days, "error" if unable to determine
+# source_rev: commit SHA or ref (e.g. CI_COMMIT_SHA)
 check_branch_age() {
-    local source_branch=$1
+    local source_rev=$1
     local default_branch=$2
     local max_age_days=${3:-30}  # Default to 30 days
     
-    # Find the merge base (common ancestor) between source and default branch
+    # Find the merge base (common ancestor) between source commit and default branch
     local merge_base_sha
-    merge_base_sha=$(git merge-base "origin/$source_branch" "origin/$default_branch" 2>/dev/null || echo "")
+    merge_base_sha=$(git merge-base "$source_rev" "origin/$default_branch" 2>/dev/null || echo "")
     
     if [[ -z "$merge_base_sha" ]]; then
         echo "error|0|"
@@ -148,7 +152,7 @@ check_branch_age() {
 
 # Check branch age relative to default branch
 print_status "$YELLOW" "Checking source branch age relative to default branch..."
-BRANCH_AGE_RESULT=$(check_branch_age "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_DEFAULT_BRANCH" 30)
+BRANCH_AGE_RESULT=$(check_branch_age "$SOURCE_BRANCH_SHA" "$CI_DEFAULT_BRANCH" 30)
 BRANCH_AGE_STATUS=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f1)
 BRANCH_AGE_DAYS=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f2)
 BRANCH_MERGE_BASE_SHA=$(echo "$BRANCH_AGE_RESULT" | cut -d'|' -f3)
@@ -175,7 +179,7 @@ check_branch_name() {
     fi
     
     # Check if branch contains any valid Jira project keys (case insensitive)
-    local valid_keys=("q2c" "storm" "shield" "sfxpro" "leadz" "avatechtdr")
+    local valid_keys=("q2c" "storm" "shield" "sfxpro" "leadz" "avatechtdr" "catalyst")
     for key in "${valid_keys[@]}"; do
         if [[ "$branch_lower" == *"$key"* ]]; then
             echo "valid"
@@ -196,20 +200,21 @@ if [[ "$BRANCH_NAME_STATUS" == "valid" ]]; then
 elif [[ "$BRANCH_NAME_STATUS" == "invalid_bar" ]]; then
     print_status "$RED" "✗ Source branch name contains BAR (release team project)"
 else
-    print_status "$RED" "✗ Source branch name does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, avatechtdr)"
+    print_status "$RED" "✗ Source branch name does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, catalyst, avatechtdr)"
 fi
 
-# Function to check if source branch contains merges from fullqa or develop branches
+# Function to check if source commit contains merges from fullqa or develop branches
 # Returns: "status|offending_commits" format
 # status: "clean" if no forbidden merges found, "forbidden_merge" if found, "error" if unable to check
+# source_rev: commit SHA (e.g. CI_COMMIT_SHA)
 check_forbidden_merges() {
-    local source_branch=$1
+    local source_rev=$1
     local default_branch=$2
     local forbidden_branches=("fullqa" "develop")
     local offending_commits=()
     
-    # Check commit messages on the source branch for forbidden merge patterns
-    # Only check commits that are on the source branch but NOT on the default branch
+    # Check commit messages on the source commit's history for forbidden merge patterns
+    # Only check commits that are on the source commit but NOT on the default branch
     # This avoids flagging old commits that were already merged into default
     # Look for patterns like "Merge fullqa into", "merge origin/fullqa into", etc.
     # We only want to catch merges FROM fullqa/develop INTO the source branch, not the reverse
@@ -218,9 +223,9 @@ check_forbidden_merges() {
         # Patterns: "Merge fullqa into", "merge origin/fullqa into", "Merge branch 'fullqa' into"
         # We use --merges to only check actual merge commits
         # The pattern ensures the forbidden branch comes before "into" (meaning it's being merged in)
-        # Use "origin/$default_branch..origin/$source_branch" to only check commits unique to source branch
+        # Use "origin/$default_branch..$source_rev" to only check commits unique to source
         local matching_commits
-        matching_commits=$(git log --format="%H" --merges --grep="[Mm]erge.*$forbidden_branch.*into\|[Mm]erge.*origin/$forbidden_branch.*into\|[Mm]erge.*branch.*['\"]$forbidden_branch.*into" "origin/$default_branch..origin/$source_branch" 2>/dev/null || echo "")
+        matching_commits=$(git log --format="%H" --merges --grep="[Mm]erge.*$forbidden_branch.*into\|[Mm]erge.*origin/$forbidden_branch.*into\|[Mm]erge.*branch.*['\"]$forbidden_branch.*into" "origin/$default_branch..$source_rev" 2>/dev/null || echo "")
         
         if [[ -n "$matching_commits" ]]; then
             # Add matching commits to offending commits list
@@ -245,7 +250,7 @@ check_forbidden_merges() {
 
 # Check for forbidden merges (fullqa/develop into source branch)
 print_status "$YELLOW" "Checking for forbidden merges (fullqa/develop into source branch)..."
-FORBIDDEN_MERGE_RESULT=$(check_forbidden_merges "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_DEFAULT_BRANCH")
+FORBIDDEN_MERGE_RESULT=$(check_forbidden_merges "$SOURCE_BRANCH_SHA" "$CI_DEFAULT_BRANCH")
 FORBIDDEN_MERGE_STATUS=$(echo "$FORBIDDEN_MERGE_RESULT" | cut -d'|' -f1)
 FORBIDDEN_MERGE_COMMITS=$(echo "$FORBIDDEN_MERGE_RESULT" | cut -d'|' -f2)
 
@@ -260,9 +265,10 @@ else
     print_status "$YELLOW" "⚠ Could not check for forbidden merges"
 fi
 
-# Function to check for merge conflicts between source and target branch
+# Function to check for merge conflicts between source branch and target branch
 # Returns: "status|conflicted_files" format
 # status: "no_conflicts" if no conflicts, "acceptable_conflicts" if only manifest/package.xml, "conflicts" if other conflicts, "error" if unable to check
+# source_ref: branch ref (e.g. origin/source_branch) - use branch name, not SHA, for reliable merge in shallow clones
 check_merge_conflicts() {
     local source_branch=$1
     local target_branch=$2
@@ -293,7 +299,7 @@ check_merge_conflicts() {
     
     # Attempt merge with --no-commit and --no-ff to detect conflicts without committing
     # Merge source branch INTO target branch (simulating the actual MR merge)
-    # Capture stderr to check for merge messages, but don't fail on merge conflicts
+    # Use branch ref (not SHA) for reliable merge in shallow clones
     local merge_output
     merge_output=$(git merge --no-commit --no-ff "origin/$source_branch" 2>&1)
     local merge_exit_code=$?
@@ -368,6 +374,7 @@ check_merge_conflicts() {
 }
 
 # Check for merge conflicts between source and target branch
+# Use source branch ref (not SHA) for reliable merge in shallow clones
 print_status "$YELLOW" "Checking for merge conflicts between source and target branch..."
 MERGE_CONFLICT_RESULT=$(check_merge_conflicts "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
 MERGE_CONFLICT_STATUS=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f1)
@@ -783,11 +790,15 @@ if [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
     fi
 fi
 
+# Use pipeline trigger user for @-mention (GitLab notifies mentioned users)
+# GITLAB_USER_LOGIN: username of user who started the pipeline (or manual job)
+NOTIFY_USER="${GITLAB_USER_LOGIN:-}"
+
 # Build the comment message (using actual newlines)
 COMMENT_BODY="## Branch Deployment Verification
 
 **Source Branch:** \`$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME\`
-**Source SHA:** \`$SOURCE_BRANCH_SHA\`
+**Source SHA:** \`${SOURCE_BRANCH_SHA:0:8}\`
 **Target Branch:** \`$CI_MERGE_REQUEST_TARGET_BRANCH_NAME\`
 
 ### Verification Results
@@ -800,7 +811,7 @@ if [[ "$BRANCH_NAME_STATUS" == "valid" ]]; then
 elif [[ "$BRANCH_NAME_STATUS" == "invalid_bar" ]]; then
     COMMENT_BODY+="- :x: **Branch Name**: Source branch contains BAR (release team project)"$'\n'
 else
-    COMMENT_BODY+="- :x: **Branch Name**: Source branch does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, avatechtdr)"$'\n'
+    COMMENT_BODY+="- :x: **Branch Name**: Source branch does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, avatechtdr, catalyst)"$'\n'
 fi
 
 # Branch age check
@@ -1038,97 +1049,67 @@ fi
 
 COMMENT_BODY+=$'\n'"---"$'\n'
 COMMENT_BODY+="*This verification was performed automatically by the CI/CD pipeline.*"
+if [[ -n "$NOTIFY_USER" ]]; then
+    COMMENT_BODY+=$'\n\n'"cc @${NOTIFY_USER}"
+fi
 
 # GitLab API base URL for merge request notes
 API_URL="https://${CI_SERVER_HOST_CLEAN}/api/v4/projects/${CI_PROJECT_ID}/merge_requests/${CI_MERGE_REQUEST_IID}/notes"
 
 # ============================================================================
-# DELETE PREVIOUS COMMENTS FROM THE SAME USER
+# DELETE PREVIOUS VERIFICATION COMMENTS (match by header, not author)
 # ============================================================================
+# Target by comment header only so this works when the bot token/user changes.
+# The unique header identifies our verification comments regardless of who posted them.
 print_status "$YELLOW" "Checking for previous verification comments to delete..."
 
-# Get the current user ID from the PAT
-CURRENT_USER_RESPONSE=$(curl -s -w "\n%{http_code}" \
+NOTES_RESPONSE=$(curl -s -w "\n%{http_code}" \
     -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
-    "https://${CI_SERVER_HOST_CLEAN}/api/v4/user" 2>&1)
+    "${API_URL}?per_page=100" 2>&1)
 
-CURRENT_USER_BODY=$(echo "$CURRENT_USER_RESPONSE" | sed '$d')
-CURRENT_USER_STATUS=$(echo "$CURRENT_USER_RESPONSE" | tail -n1)
+NOTES_BODY=$(echo "$NOTES_RESPONSE" | sed '$d')
+NOTES_STATUS=$(echo "$NOTES_RESPONSE" | tail -n1)
 
-CURRENT_USER_ID=""
-CURRENT_USER_NAME=""
-if [[ "$CURRENT_USER_STATUS" -ge 200 && "$CURRENT_USER_STATUS" -lt 300 ]]; then
+if [[ "$NOTES_STATUS" -ge 200 && "$NOTES_STATUS" -lt 300 ]]; then
+    DELETED_COUNT=0
+
     if command -v jq &> /dev/null; then
-        CURRENT_USER_ID=$(echo "$CURRENT_USER_BODY" | jq -r '.id // empty')
-        CURRENT_USER_NAME=$(echo "$CURRENT_USER_BODY" | jq -r '.username // empty')
-    else
-        # Fallback: extract user ID with grep/sed
-        CURRENT_USER_ID=$(echo "$CURRENT_USER_BODY" | grep -o '"id":[0-9]*' | head -1 | sed 's/"id"://')
-    fi
-    print_status "$YELLOW" "Current user ID: $CURRENT_USER_ID ($CURRENT_USER_NAME)"
-else
-    print_status "$YELLOW" "⚠ Could not determine current user ID (HTTP $CURRENT_USER_STATUS)"
-fi
+        # Find notes containing our verification header (any author - resilient to bot token rotation)
+        NOTE_IDS=$(echo "$NOTES_BODY" | jq -r '.[] | select(.body | contains("Branch Deployment Verification")) | .id' 2>/dev/null | tr -d '\r' || echo "")
 
-# If we have a user ID, fetch and delete previous comments
-if [[ -n "$CURRENT_USER_ID" ]]; then
-    # Fetch all notes/comments on the MR
-    NOTES_RESPONSE=$(curl -s -w "\n%{http_code}" \
-        -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
-        "${API_URL}?per_page=100" 2>&1)
-    
-    NOTES_BODY=$(echo "$NOTES_RESPONSE" | sed '$d')
-    NOTES_STATUS=$(echo "$NOTES_RESPONSE" | tail -n1)
-    
-    if [[ "$NOTES_STATUS" -ge 200 && "$NOTES_STATUS" -lt 300 ]]; then
-        # Find notes by the current user that contain our verification header
-        DELETED_COUNT=0
-        
-        if command -v jq &> /dev/null; then
-            # Use jq to find notes from current user that contain "Branch Deployment Verification"
-            # Use --argjson for safe variable passing on Windows/Git Bash
-            # Use tr -d '\r' to remove Windows carriage returns
-            NOTE_IDS=$(echo "$NOTES_BODY" | jq -r --argjson uid "$CURRENT_USER_ID" '.[] | select(.author.id == $uid) | select(.body | contains("Branch Deployment Verification")) | .id' 2>/dev/null | tr -d '\r' || echo "")
-            
-            if [[ -n "$NOTE_IDS" ]]; then
-                while IFS= read -r note_id; do
-                    # Strip carriage returns that may appear on Windows
-                    note_id=$(echo "$note_id" | tr -d '\r')
-                    if [[ -n "$note_id" && "$note_id" != "null" ]]; then
-                        print_status "$YELLOW" "  Deleting previous comment ID: $note_id"
-                        
-                        DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" \
-                            -X DELETE \
-                            -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
-                            "${API_URL}/${note_id}" 2>&1)
-                        
-                        DELETE_STATUS=$(echo "$DELETE_RESPONSE" | tail -n1)
-                        
-                        if [[ "$DELETE_STATUS" -ge 200 && "$DELETE_STATUS" -lt 300 ]] || [[ "$DELETE_STATUS" == "204" ]]; then
-                            ((DELETED_COUNT++))
-                            print_status "$GREEN" "    ✓ Deleted comment $note_id"
-                        else
-                            print_status "$YELLOW" "    ⚠ Failed to delete comment $note_id (HTTP $DELETE_STATUS)"
-                        fi
+        if [[ -n "$NOTE_IDS" ]]; then
+            while IFS= read -r note_id; do
+                note_id=$(echo "$note_id" | tr -d '\r')
+                if [[ -n "$note_id" && "$note_id" != "null" ]]; then
+                    print_status "$YELLOW" "  Deleting previous comment ID: $note_id"
+
+                    DELETE_RESPONSE=$(curl -s -w "\n%{http_code}" \
+                        -X DELETE \
+                        -H "PRIVATE-TOKEN: ${MAINTAINER_PAT_VALUE}" \
+                        "${API_URL}/${note_id}" 2>&1)
+
+                    DELETE_STATUS=$(echo "$DELETE_RESPONSE" | tail -n1)
+
+                    if [[ "$DELETE_STATUS" -ge 200 && "$DELETE_STATUS" -lt 300 ]] || [[ "$DELETE_STATUS" == "204" ]]; then
+                        DELETED_COUNT=$((DELETED_COUNT + 1))
+                        print_status "$GREEN" "    ✓ Deleted comment $note_id"
+                    else
+                        print_status "$YELLOW" "    ⚠ Failed to delete comment $note_id (HTTP $DELETE_STATUS)"
                     fi
-                done <<< "$NOTE_IDS"
-            fi
-        else
-            # Fallback without jq - basic pattern matching
-            # This is less reliable but works for simple cases
-            print_status "$YELLOW" "  ⚠ jq not available, skipping comment deletion"
-        fi
-        
-        if [[ $DELETED_COUNT -gt 0 ]]; then
-            print_status "$GREEN" "✓ Deleted $DELETED_COUNT previous verification comment(s)"
-        else
-            print_status "$YELLOW" "No previous verification comments found to delete"
+                fi
+            done <<< "$NOTE_IDS"
         fi
     else
-        print_status "$YELLOW" "⚠ Could not fetch existing comments (HTTP $NOTES_STATUS)"
+        print_status "$YELLOW" "  ⚠ jq not available, skipping comment deletion"
+    fi
+
+    if [[ $DELETED_COUNT -gt 0 ]]; then
+        print_status "$GREEN" "✓ Deleted $DELETED_COUNT previous verification comment(s)"
+    else
+        print_status "$YELLOW" "No previous verification comments found to delete"
     fi
 else
-    print_status "$YELLOW" "⚠ Skipping comment deletion - could not determine user ID"
+    print_status "$YELLOW" "⚠ Could not fetch existing comments (HTTP $NOTES_STATUS)"
 fi
 
 # ============================================================================

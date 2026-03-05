@@ -16,14 +16,19 @@
     - testclasses=$(python3 ./scripts/python/package_check.py -x "$DEPLOY_PACKAGE" -s "$CI_JOB_STAGE" -e "$CI_ENVIRONMENT_NAME")
 
 ####################################################
-# Validate metadata in a Salesforce org.
+# Validate metadata against a Salesforce org.
+# Uses source branch in a MR as the reference, not the target branch.
+# Does not simulate the actual merge itself, so validation may be inaccurate against sandboxes.
 ####################################################
 .validate-metadata:
   extends: .authenticate
+  coverage: '/TOTAL.+ ([0-9]{1,3}(?:\.[0-9]+)?%)/'
   artifacts:
     when: always
     paths:
       - coverage-sonar.xml
+      - coverage-html.html
+      - coverage-cobertura.xml
     expire_in: 2 weeks
     reports:
       coverage_report:
@@ -31,9 +36,18 @@
         path: coverage-cobertura.xml
   script:
     - if [ "$testclasses" != "not a test" ];
-      then echo y | sf plugins install apex-code-coverage-transformer@latest;
+      then echo y | sf plugins install apex-code-coverage-transformer@latest || true; # don't fail if NPM has issues
       fi
     - source ./scripts/bash/deploy_metadata_sf.sh
+    - |
+      COVERAGE_FILE="coverage-cobertura.xml"
+      if [ -s "$COVERAGE_FILE" ]; then
+        LINE_RATE="$(grep -oE '<coverage[^>]*\bline-rate="[^"]+"' "$COVERAGE_FILE" | head -1 | sed -E 's/.*line-rate="([^"]+)".*/\1/')"
+        if [ -n "$LINE_RATE" ]; then
+          PCT="$(awk -v r="$LINE_RATE" 'BEGIN { printf("%.2f%%", r*100) }')"
+          echo "TOTAL coverage: $PCT"
+        fi
+      fi
   after_script:
     - source ./scripts/bash/deploy_slack_status.sh; share_slack_update_build
 

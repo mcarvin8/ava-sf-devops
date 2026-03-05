@@ -160,6 +160,23 @@ pre-merge-check:prd:
   allow_failure: false
   cache: []
   script:
-    - source ./scripts/bash/verify_branch_deployment.sh
-  tags: 
+    - source ./scripts/bash/verify_branch_compliance_prd.sh
+  tags:
+    - aws,prd,us-west-2
+
+####################################################
+# For MRs targeting fullqa or develop: post compliance check
+# (branch from main, age, no fullqa/develop merges) so developers
+# fix process issues before opening the main MR.
+####################################################
+pre-merge-check:fullqa-develop:
+  stage: quality
+  rules:
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
+      when: always
+  allow_failure: false
+  cache: []
+  script:
+    - source ./scripts/bash/verify_branch_compliance_sbx.sh
+  tags:
     - aws,prd,us-west-2
