@@ -147,36 +147,18 @@ quality:
     - aws,prd,us-west-2
 
 ####################################################
-# Validates a branch with an open merge request into production
-# has been merged into fullqa and develop branches.
+# MR GitLab Workflow Compliance Checks (main + sandbox).
 ####################################################
-pre-merge-check:prd:
+pre-merge-check:
   stage: quality
   rules:
-    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa'
+    - if: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: never
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
       when: always
   allow_failure: false
   cache: []
   script:
-    - source ./scripts/bash/verify_branch_compliance_prd.sh
-  tags:
-    - aws,prd,us-west-2
-
-####################################################
-# For MRs targeting fullqa or develop: post compliance check
-# (branch from main, age, no fullqa/develop merges) so developers
-# fix process issues before opening the main MR.
-####################################################
-pre-merge-check:fullqa-develop:
-  stage: quality
-  rules:
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'fullqa' || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == 'develop'
-      when: always
-  allow_failure: false
-  cache: []
-  script:
-    - source ./scripts/bash/verify_branch_compliance_sbx.sh
+    - source ./scripts/bash/verify_branch_compliance.sh
   tags:
     - aws,prd,us-west-2

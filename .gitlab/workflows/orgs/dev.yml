@@ -31,6 +31,8 @@ deploy:dev:
   rules:
     - if: $SANDBOX_DISABLED
       when: never
+    - if: '$CI_COMMIT_MESSAGE =~ /chore\(metadata-retrieval\):/i'
+      when: never
     - if: $CI_COMMIT_REF_NAME == 'develop' && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: false

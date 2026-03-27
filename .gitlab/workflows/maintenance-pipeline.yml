@@ -74,33 +74,50 @@ prodBackfill:
     - aws,prd,us-west-2
 
 ####################################################
-# Retrieve metadata defined in the package.xml into GitLab branches.
-# $PACKAGE_NAME must be set with file name under scripts/packages
+# Retrieve metadata from sandboxes into GitLab branches (parallel: one job per branch).
+# $PACKAGE_NAME must be set (file under scripts/packages). Same schedule as before
+# ($JOB_NAME == sbxBackfill); both jobs run together and do not share git state.
 ####################################################
-packageBackfillSbx:
+.packageBackfillSbxBase:
   stage: maintenance
+  cache: []
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $PACKAGE_NAME && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'sbxBackfill'
       when: always
     - when: never
   allow_failure: false
+  tags:
+    - aws,prd,us-west-2
+
+packageBackfillSbxFullqa:
+  extends: .packageBackfillSbxBase
+  variables:
+    ORG_BRANCH: fullqa
   script:
     - echo $FULLQA_AUTH_URL | sf org login sfdx-url --set-default --alias fullqa --sfdx-url-stdin
+    - source ./scripts/bash/retrieve_packages.sh
+
+packageBackfillSbxDevelop:
+  extends: .packageBackfillSbxBase
+  variables:
+    ORG_BRANCH: develop
+  script:
     - echo $SANDBOX_AUTH_URL | sf org login sfdx-url --set-default --alias develop --sfdx-url-stdin
-    - source ./scripts/bash/retrieve_packages_sbx.sh
-  tags: 
-    - aws,prd,us-west-2
+    - source ./scripts/bash/retrieve_packages.sh
 
 packageBackfillPrd:
   stage: maintenance
+  cache: []
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $PACKAGE_NAME && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'prdBackfill'
       when: always
     - when: never
   allow_failure: false
+  variables:
+    ORG_BRANCH: $CI_DEFAULT_BRANCH
   script:
-    - echo $PRODUCTION_AUTH_URL | sf org login sfdx-url --set-default --alias PRODUCTION --sfdx-url-stdin
-    - source ./scripts/bash/retrieve_packages_prd.sh
+    - echo $PRODUCTION_AUTH_URL | sf org login sfdx-url --set-default --alias main --sfdx-url-stdin
+    - source ./scripts/bash/retrieve_packages.sh
   tags: 
     - aws,prd,us-west-2
 
@@ -155,3 +172,18 @@ metadataAudit:
   tags: 
     - aws,prd,us-west-2
 
+####################################################
+# Executes GitLab sandbox refresh steps.
+####################################################
+refreshSbxBranches:
+  stage: maintenance
+  cache: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'schedule' && $JOB_NAME == 'refreshSbxBranches'
+      when: always
+    - when: never
+  allow_failure: false
+  script:
+    - source ./scripts/bash/refresh_sandbox_branches.sh
+  tags: 
+    - aws,prd,us-west-2

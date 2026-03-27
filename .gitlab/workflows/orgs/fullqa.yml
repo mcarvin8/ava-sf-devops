@@ -31,6 +31,8 @@ deploy:fullqa:
   rules:
     - if: $FULLQA_DISABLED
       when: never
+    - if: '$CI_COMMIT_MESSAGE =~ /chore\(metadata-retrieval\):/i'
+      when: never
     - if: $CI_COMMIT_REF_NAME == 'fullqa' && $CI_PIPELINE_SOURCE == 'push'
       when: always
   allow_failure: false

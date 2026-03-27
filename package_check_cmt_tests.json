@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "apex_type": "ApexTrigger",
+      "apex_name": "OpportunityTrigger",
+      "cmt_record_qualified_name": "SwitchForAutomation.OpportunityTriggerHandler_V2",
+      "switch_field": "Turn_on__c",
+      "tests_when_enabled": "OpportunityTriggerHandlerTest_V2",
+      "tests_when_disabled": "OpportunityTriggerHandlerTest"
+    }
+  ]
+}

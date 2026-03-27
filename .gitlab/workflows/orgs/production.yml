@@ -29,7 +29,7 @@ deploy:prd:
   rules:
     - if: $PRODUCTION_DISABLED
       when: never
-    - if: '$CI_COMMIT_MESSAGE =~ /Retrieve latest production metadata defined in/i'
+    - if: '$CI_COMMIT_MESSAGE =~ /chore\(metadata-retrieval\):/i'
       when: never
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == 'push'
       when: always
