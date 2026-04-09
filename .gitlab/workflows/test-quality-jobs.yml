@@ -159,6 +159,9 @@ pre-merge-check:
   allow_failure: false
   cache: []
   script:
+    # Install sfdx-git-delta to compare developer package.xml versus git diff package.xml
+    # Allowed to fail if NPM has intermittent issues
+    - echo y | sf plugins install sfdx-git-delta@latest || true
     - source ./scripts/bash/verify_branch_compliance.sh
   tags:
     - aws,prd,us-west-2

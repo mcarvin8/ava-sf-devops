@@ -1,22 +1,18 @@
 #!/bin/bash
 ################################################################################
-# Script: verify_branch_compliance_prd.sh
-# Description: Verifies if the source branch in a merge request (open against
-#              the default branch) has been successfully merged & deployed into
-#              fullqa and develop branches. Posts a comment to the MR with the
-#              verification results.
-# Usage: Called automatically from GitLab CI/CD pipeline
-# Dependencies: git, curl, jq (optional, for JSON parsing)
-# Environment Variables Required:
-#   - CI_COMMIT_SHA: Commit that triggered the pipeline (avoids race when new commits are pushed)
-#   - CI_MERGE_REQUEST_IID: Merge request IID
-#   - CI_MERGE_REQUEST_SOURCE_BRANCH_NAME: Source branch name
-#   - CI_MERGE_REQUEST_TARGET_BRANCH_NAME: Target branch name (should be default)
-#   - CI_PROJECT_ID: GitLab project ID
-#   - CI_SERVER_HOST: GitLab server host
-#   - CI_PROJECT_PATH: Project path (e.g., group/project)
-#   - MAINTAINER_PAT_VALUE: Project access token for API authentication
-#   - CI_DEFAULT_BRANCH: Default branch name (e.g., main)
+# Script: verify_branch_compliance.sh
+# Description: Unified MR branch compliance for default branch, fullqa, and develop.
+#              - Default-branch MRs: merge-conflict check vs main, fullqa/develop
+#                merge + deploy verification, one predeploy job (org-specific),
+#                package.xml check, lineage rules.
+#              - fullqa/develop MRs: same lineage + package + predeploy for that
+#                org only (no merge-conflict trial merge; no fullqa/develop deploy gates).
+# Usage: Sourced from GitLab CI (pre-merge-check jobs).
+# Dependencies: git, curl, jq (optional)
+# Environment: CI_COMMIT_SHA, CI_MERGE_REQUEST_*, CI_MERGE_REQUEST_DIFF_BASE_SHA,
+#              CI_PROJECT_ID, CI_SERVER_HOST, CI_PROJECT_PATH, MAINTAINER_PAT_VALUE,
+#              CI_DEFAULT_BRANCH
+# Optional: sf CLI + python3 for sfdx-git-delta manifest vs git-delta recommendation.
 ################################################################################
 set -euo pipefail
 
@@ -42,7 +38,6 @@ check_required_var() {
     fi
 }
 
-# Validate required environment variables
 print_status "$YELLOW" "Validating required environment variables..."
 check_required_var "CI_COMMIT_SHA"
 check_required_var "CI_MERGE_REQUEST_IID"
@@ -54,22 +49,45 @@ check_required_var "CI_PROJECT_PATH"
 check_required_var "MAINTAINER_PAT_VALUE"
 check_required_var "CI_DEFAULT_BRANCH"
 
-# Verify this is a merge request against the default branch
-if [[ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" != "$CI_DEFAULT_BRANCH" ]]; then
-    print_status "$YELLOW" "Skipping verification: MR is not targeting the default branch ($CI_DEFAULT_BRANCH)"
+# Only run for MRs targeting default branch, fullqa, or develop
+if [[ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" != "$CI_DEFAULT_BRANCH" && \
+      "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" != "fullqa" && \
+      "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" != "develop" ]]; then
+    print_status "$YELLOW" "Skipping: MR target is not default branch, fullqa, or develop ($CI_MERGE_REQUEST_TARGET_BRANCH_NAME)"
     exit 0
 fi
 
-print_status "$GREEN" "Starting branch deployment verification..."
+if [[ "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" == "$CI_DEFAULT_BRANCH" ]]; then
+    MR_MODE=main
+else
+    MR_MODE=sandbox
+fi
+
+# One predeploy validation job name per MR target (each org has its own job in the MR pipeline)
+case "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" in
+    "$CI_DEFAULT_BRANCH") PREDEPLOY_JOB_NAME="test:predeploy:prd" ;;
+    fullqa)               PREDEPLOY_JOB_NAME="test:predeploy:fullqa" ;;
+    develop)              PREDEPLOY_JOB_NAME="test:predeploy:dev" ;;
+    *)                    PREDEPLOY_JOB_NAME="test:predeploy:prd" ;;
+esac
+
+if [[ "$MR_MODE" == "main" ]]; then
+    print_status "$GREEN" "Starting branch deployment verification (default branch MR)..."
+else
+    print_status "$GREEN" "Starting MR branch compliance (fullqa/develop MR)..."
+fi
 print_status "$YELLOW" "Source branch: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
 print_status "$YELLOW" "Target branch: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
 print_status "$YELLOW" "Merge Request IID: $CI_MERGE_REQUEST_IID"
 
-# Fetch all branches to ensure we have the latest information
 print_status "$YELLOW" "Fetching all branches..."
 git fetch --all --quiet
-git config user.name "${MAINTAINER_PAT_NAME}"
-git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+if [[ -n "${MAINTAINER_PAT_NAME:-}" ]]; then
+    git config user.name "${MAINTAINER_PAT_NAME}"
+fi
+if [[ -n "${MAINTAINER_PAT_USER_NAME:-}" ]]; then
+    git config user.email "${MAINTAINER_PAT_USER_NAME}@noreply.${CI_SERVER_HOST}"
+fi
 
 # Use CI_COMMIT_SHA (commit that triggered this pipeline) to avoid race condition:
 # if a user pushes a new commit while this pipeline runs, we must verify THIS commit, not the latest.
@@ -92,6 +110,12 @@ PACKAGE_CHECK_SCRIPT="scripts/python/package_check.py"
 PACKAGE_CHECK_STATUS=""
 PACKAGE_CHECK_OUTPUT=""
 PACKAGE_CHECK_WARNINGS=""
+
+# Manifest vs additive git delta (sfdx-git-delta); recommendation only — not a gate
+MANIFEST_DELTA_STATUS="skipped"
+MANIFEST_DELTA_EXCESS=""
+MANIFEST_DELTA_MISSING=""
+MANIFEST_DELTA_DETAIL=""
 
 # Function to check how old the source commit is relative to the default branch
 # Returns: "status|age_days|merge_base_sha" format
@@ -203,6 +227,34 @@ else
     print_status "$RED" "✗ Source branch name does not contain a valid Jira project key (q2c, storm, shield, sfxpro, leadz, catalyst, avatechtdr)"
 fi
 
+# Check if source contains merge commits that merged something INTO develop or fullqa.
+# Such commits only exist on develop/fullqa; main should not have them.
+# If source has them, it was branched from develop/fullqa instead of main.
+# Returns: "status|offending_commits"
+# Note: Old merge commits into develop/fullqa may exist on main history; we only check
+# commits in origin/main..source (new commits), so no new branch should introduce them.
+check_source_not_from_develop_fullqa() {
+    local source_rev=$1
+    local default_branch=$2
+    local offending_commits=()
+
+    local matching_commits
+    matching_commits=$(git log --format="%H" --merges \
+        --grep="[Mm]erge.*into.*develop\|[Mm]erge.*into.*fullqa\|[Mm]erge.*into.*origin/develop\|[Mm]erge.*into.*origin/fullqa" \
+        "origin/$default_branch..$source_rev" 2>/dev/null || echo "")
+    if [[ -n "$matching_commits" ]]; then
+        while IFS= read -r commit; do
+            [[ -n "$commit" ]] && offending_commits+=("$commit")
+        done <<< "$matching_commits"
+    fi
+
+    if [[ ${#offending_commits[@]} -gt 0 ]]; then
+        echo "branch_from_sandbox|$(IFS=','; echo "${offending_commits[*]}")"
+    else
+        echo "clean|"
+    fi
+}
+
 # Function to check if source commit contains merges from fullqa or develop branches
 # Returns: "status|offending_commits" format
 # status: "clean" if no forbidden merges found, "forbidden_merge" if found, "error" if unable to check
@@ -263,6 +315,20 @@ elif [[ "$FORBIDDEN_MERGE_STATUS" == "forbidden_merge" ]]; then
     fi
 else
     print_status "$YELLOW" "⚠ Could not check for forbidden merges"
+fi
+
+print_status "$YELLOW" "Checking source was not branched from develop/fullqa (no merge-into-sandbox commits)..."
+SOURCE_ORIGIN_RESULT=$(check_source_not_from_develop_fullqa "$SOURCE_BRANCH_SHA" "$CI_DEFAULT_BRANCH")
+SOURCE_ORIGIN_STATUS=$(echo "$SOURCE_ORIGIN_RESULT" | cut -d'|' -f1)
+SOURCE_ORIGIN_COMMITS=$(echo "$SOURCE_ORIGIN_RESULT" | cut -d'|' -f2)
+
+if [[ "$SOURCE_ORIGIN_STATUS" == "clean" ]]; then
+    print_status "$GREEN" "✓ Source branch does not contain merge-into-develop/fullqa commits (branched from main)"
+elif [[ "$SOURCE_ORIGIN_STATUS" == "branch_from_sandbox" ]]; then
+    print_status "$RED" "✗ Source branch contains merge(s) into develop/fullqa - likely branched from sandbox, not main"
+    [[ -n "$SOURCE_ORIGIN_COMMITS" ]] && print_status "$RED" "  Commit(s): $SOURCE_ORIGIN_COMMITS"
+else
+    print_status "$YELLOW" "⚠ Could not check source branch origin"
 fi
 
 # Function to check for merge conflicts between source branch and target branch
@@ -373,24 +439,28 @@ check_merge_conflicts() {
     fi
 }
 
-# Check for merge conflicts between source and target branch
-# Use source branch ref (not SHA) for reliable merge in shallow clones
-print_status "$YELLOW" "Checking for merge conflicts between source and target branch..."
-MERGE_CONFLICT_RESULT=$(check_merge_conflicts "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
-MERGE_CONFLICT_STATUS=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f1)
-MERGE_CONFLICT_FILES=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f2)
+# Merge-conflict trial merge: only for default-branch MRs (sandbox MRs conflict often by design)
+if [[ "$MR_MODE" == "main" ]]; then
+    print_status "$YELLOW" "Checking for merge conflicts between source and target branch..."
+    MERGE_CONFLICT_RESULT=$(check_merge_conflicts "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
+    MERGE_CONFLICT_STATUS=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f1)
+    MERGE_CONFLICT_FILES=$(echo "$MERGE_CONFLICT_RESULT" | cut -d'|' -f2)
 
-if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
-    print_status "$GREEN" "✓ No merge conflicts between source and target branch"
-elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
-    print_status "$GREEN" "✓ Merge conflicts found, but only in manifest/package.xml (acceptable)"
-elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
-    print_status "$RED" "✗ Merge conflicts detected between source and target branch"
-    if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
-        print_status "$RED" "  Conflicted file(s): $MERGE_CONFLICT_FILES"
+    if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
+        print_status "$GREEN" "✓ No merge conflicts between source and target branch"
+    elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
+        print_status "$GREEN" "✓ Merge conflicts found, but only in manifest/package.xml (acceptable)"
+    elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
+        print_status "$RED" "✗ Merge conflicts detected between source and target branch"
+        if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
+            print_status "$RED" "  Conflicted file(s): $MERGE_CONFLICT_FILES"
+        fi
+    else
+        print_status "$YELLOW" "⚠ Could not check for merge conflicts: $MERGE_CONFLICT_FILES"
     fi
 else
-    print_status "$YELLOW" "⚠ Could not check for merge conflicts: $MERGE_CONFLICT_FILES"
+    MERGE_CONFLICT_STATUS=""
+    MERGE_CONFLICT_FILES=""
 fi
 
 # ============================================================================
@@ -422,6 +492,61 @@ if [[ "$CURRENT_SHA" != "$SOURCE_BRANCH_SHA" ]]; then
     exit 1
 fi
 print_status "$GREEN" "✓ Checked out source branch commit $SOURCE_BRANCH_SHA"
+
+# Manifest vs additive git delta (constructive package only; destructiveChanges ignored)
+COMPARE_MANIFEST_SCRIPT="scripts/python/compare_manifest_to_git_delta.py"
+
+if [[ -n "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]] && command -v sf &>/dev/null && command -v python3 &>/dev/null && [[ -f "$COMPARE_MANIFEST_SCRIPT" ]]; then
+    if ! git cat-file -e "${CI_MERGE_REQUEST_DIFF_BASE_SHA}^{commit}" 2>/dev/null; then
+        print_status "$YELLOW" "Fetching merge-request diff base ${CI_MERGE_REQUEST_DIFF_BASE_SHA:0:8}..."
+        git fetch -q origin "${CI_MERGE_REQUEST_DIFF_BASE_SHA}" 2>/dev/null || true
+    fi
+    if git cat-file -e "${CI_MERGE_REQUEST_DIFF_BASE_SHA}^{commit}" 2>/dev/null; then
+        rm -rf package destructiveChanges
+        print_status "$YELLOW" "Running sf sgd source delta (from diff base to HEAD)..."
+        set +e
+        sgd_out=$(sf sgd source delta --from "$CI_MERGE_REQUEST_DIFF_BASE_SHA" --to "HEAD" --output-dir . 2>&1)
+        sgd_rc=$?
+        set -e
+        if [[ $sgd_rc -ne 0 ]]; then
+            MANIFEST_DELTA_STATUS="error"
+            MANIFEST_DELTA_DETAIL=$(echo "$sgd_out" | tail -c 800)
+            print_status "$YELLOW" "⚠ sfdx-git-delta failed (non-fatal for compliance)"
+        elif [[ -f "package/package.xml" ]] && [[ -f "$PACKAGE_XML_PATH" ]]; then
+            mapfile -t _mdlines < <(python3 "$COMPARE_MANIFEST_SCRIPT" "package/package.xml" "$PACKAGE_XML_PATH" 2>/dev/null || printf '%s\n' "error" "" "")
+            MANIFEST_DELTA_STATUS="${_mdlines[0]:-error}"
+            MANIFEST_DELTA_EXCESS="${_mdlines[1]:-}"
+            MANIFEST_DELTA_MISSING="${_mdlines[2]:-}"
+            if [[ "$MANIFEST_DELTA_STATUS" == "aligned" ]]; then
+                print_status "$GREEN" "✓ Manifest vs additive git delta: aligned (recommendation check)"
+            elif [[ "$MANIFEST_DELTA_STATUS" == "warning" ]]; then
+                print_status "$YELLOW" "⚠ Manifest vs git delta: consider trimming manifest or adding missing types (see MR comment)"
+            else
+                print_status "$YELLOW" "⚠ Manifest vs git delta compare: $MANIFEST_DELTA_STATUS"
+            fi
+        elif [[ ! -f "$PACKAGE_XML_PATH" ]]; then
+            MANIFEST_DELTA_DETAIL="manifest/package.xml not found at this commit"
+        else
+            MANIFEST_DELTA_STATUS="skipped"
+            MANIFEST_DELTA_DETAIL="sfdx-git-delta did not emit package/package.xml for this range"
+            print_status "$YELLOW" "⚠ sfdx-git-delta: no package/package.xml (no constructive delta or empty)"
+        fi
+        rm -rf package destructiveChanges
+    else
+        MANIFEST_DELTA_DETAIL="Could not resolve CI_MERGE_REQUEST_DIFF_BASE_SHA (ensure clone/fetch includes that commit; try unshallow)"
+        print_status "$YELLOW" "⚠ $MANIFEST_DELTA_DETAIL"
+    fi
+else
+    if [[ -z "${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}" ]]; then
+        MANIFEST_DELTA_DETAIL="CI_MERGE_REQUEST_DIFF_BASE_SHA not set"
+    elif ! command -v sf &>/dev/null; then
+        MANIFEST_DELTA_DETAIL="sf CLI not found"
+    elif ! command -v python3 &>/dev/null; then
+        MANIFEST_DELTA_DETAIL="python3 not found"
+    else
+        MANIFEST_DELTA_DETAIL="compare_manifest_to_git_delta.py not found"
+    fi
+fi
 
 # Check if package.xml exists
 if [[ ! -f "$PACKAGE_XML_PATH" ]]; then
@@ -614,41 +739,46 @@ check_deployment_job_status() {
     fi
 }
 
-# Verify fullqa branch
-print_status "$YELLOW" "Checking fullqa branch..."
-FULLQA_RESULT=$(check_branch_merged "fullqa" "$SOURCE_BRANCH_SHA")
-FULLQA_EXISTS=$(echo "$FULLQA_RESULT" | cut -d'|' -f1)
-FULLQA_MERGED=$(echo "$FULLQA_RESULT" | cut -d'|' -f2)
-FULLQA_MERGE_COMMIT=$(echo "$FULLQA_RESULT" | cut -d'|' -f3)
+if [[ "$MR_MODE" == "main" ]]; then
+    print_status "$YELLOW" "Checking fullqa branch..."
+    FULLQA_RESULT=$(check_branch_merged "fullqa" "$SOURCE_BRANCH_SHA")
+    FULLQA_EXISTS=$(echo "$FULLQA_RESULT" | cut -d'|' -f1)
+    FULLQA_MERGED=$(echo "$FULLQA_RESULT" | cut -d'|' -f2)
+    FULLQA_MERGE_COMMIT=$(echo "$FULLQA_RESULT" | cut -d'|' -f3)
 
-# Verify develop branch
-print_status "$YELLOW" "Checking develop branch..."
-DEVELOP_RESULT=$(check_branch_merged "develop" "$SOURCE_BRANCH_SHA")
-DEVELOP_EXISTS=$(echo "$DEVELOP_RESULT" | cut -d'|' -f1)
-DEVELOP_MERGED=$(echo "$DEVELOP_RESULT" | cut -d'|' -f2)
-DEVELOP_MERGE_COMMIT=$(echo "$DEVELOP_RESULT" | cut -d'|' -f3)
+    print_status "$YELLOW" "Checking develop branch..."
+    DEVELOP_RESULT=$(check_branch_merged "develop" "$SOURCE_BRANCH_SHA")
+    DEVELOP_EXISTS=$(echo "$DEVELOP_RESULT" | cut -d'|' -f1)
+    DEVELOP_MERGED=$(echo "$DEVELOP_RESULT" | cut -d'|' -f2)
+    DEVELOP_MERGE_COMMIT=$(echo "$DEVELOP_RESULT" | cut -d'|' -f3)
+else
+    FULLQA_EXISTS=false
+    FULLQA_MERGED=false
+    FULLQA_MERGE_COMMIT=""
+    DEVELOP_EXISTS=false
+    DEVELOP_MERGED=false
+    DEVELOP_MERGE_COMMIT=""
+fi
 
-# Remove trailing slash from CI_SERVER_HOST for API calls
 CI_SERVER_HOST_CLEAN=$(echo "$CI_SERVER_HOST" | sed 's|/$||')
 
-# Check production validation job status (test:predeploy:prd) for the source branch commit
-print_status "$YELLOW" "Checking production validation job (test:predeploy:prd) for source branch commit..."
-PREDEPLOY_PRD_STATUS=$(check_deployment_job_status "$SOURCE_BRANCH_SHA" "test:predeploy:prd" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST_CLEAN")
+print_status "$YELLOW" "Checking predeploy validation job ($PREDEPLOY_JOB_NAME) for source branch commit..."
+PREDEPLOY_STATUS=$(check_deployment_job_status "$SOURCE_BRANCH_SHA" "$PREDEPLOY_JOB_NAME" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST_CLEAN")
 
-if [[ "$PREDEPLOY_PRD_STATUS" == "success" ]]; then
-    print_status "$GREEN" "✓ Production validation (test:predeploy:prd) passed"
-elif [[ "$PREDEPLOY_PRD_STATUS" == "failed" ]]; then
-    print_status "$RED" "✗ Production validation (test:predeploy:prd) failed"
-elif [[ "$PREDEPLOY_PRD_STATUS" == "running" || "$PREDEPLOY_PRD_STATUS" == "pending" ]]; then
-    print_status "$YELLOW" "⏳ Production validation (test:predeploy:prd) in progress"
-elif [[ "$PREDEPLOY_PRD_STATUS" == "job_not_found" ]]; then
-    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) job not found"
-elif [[ "$PREDEPLOY_PRD_STATUS" == "no_pipeline" ]]; then
-    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) - no pipeline found"
-elif [[ "$PREDEPLOY_PRD_STATUS" == "api_error" ]]; then
-    print_status "$YELLOW" "⚠ Production validation (test:predeploy:prd) - API error"
+if [[ "$PREDEPLOY_STATUS" == "success" ]]; then
+    print_status "$GREEN" "✓ Predeploy validation ($PREDEPLOY_JOB_NAME) passed"
+elif [[ "$PREDEPLOY_STATUS" == "failed" ]]; then
+    print_status "$RED" "✗ Predeploy validation ($PREDEPLOY_JOB_NAME) failed"
+elif [[ "$PREDEPLOY_STATUS" == "running" || "$PREDEPLOY_STATUS" == "pending" ]]; then
+    print_status "$YELLOW" "⏳ Predeploy validation ($PREDEPLOY_JOB_NAME) in progress"
+elif [[ "$PREDEPLOY_STATUS" == "job_not_found" ]]; then
+    print_status "$YELLOW" "⚠ Predeploy validation ($PREDEPLOY_JOB_NAME) job not found"
+elif [[ "$PREDEPLOY_STATUS" == "no_pipeline" ]]; then
+    print_status "$YELLOW" "⚠ Predeploy validation ($PREDEPLOY_JOB_NAME) - no pipeline found"
+elif [[ "$PREDEPLOY_STATUS" == "api_error" ]]; then
+    print_status "$YELLOW" "⚠ Predeploy validation ($PREDEPLOY_JOB_NAME) - API error"
 else
-    print_status "$YELLOW" "? Production validation (test:predeploy:prd) status unknown ($PREDEPLOY_PRD_STATUS)"
+    print_status "$YELLOW" "? Predeploy validation ($PREDEPLOY_JOB_NAME) status unknown ($PREDEPLOY_STATUS)"
 fi
 
 # Function to find commits with successful deploy jobs
@@ -760,33 +890,32 @@ find_deploy_job_status() {
     echo "job_not_found|"
 }
 
-# Check deployment job status if branches are merged
-# We check multiple commits that contain the source SHA to find the one with the deploy job
 FULLQA_DEPLOY_STATUS=""
 DEVELOP_DEPLOY_STATUS=""
-
 FULLQA_DEPLOY_COMMIT=""
 DEVELOP_DEPLOY_COMMIT=""
 
-if [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]]; then
-    print_status "$YELLOW" "Searching for deploy:fullqa job in commits containing source SHA..."
-    FULLQA_RESULT=$(find_deploy_job_status "fullqa" "$SOURCE_BRANCH_SHA" "deploy:fullqa" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>&1 | grep -v "Checking commit" | tail -1)
-    FULLQA_DEPLOY_STATUS=$(echo "$FULLQA_RESULT" | cut -d'|' -f1)
-    FULLQA_DEPLOY_COMMIT=$(echo "$FULLQA_RESULT" | cut -d'|' -f2)
-    print_status "$YELLOW" "  deploy:fullqa status: $FULLQA_DEPLOY_STATUS"
-    if [[ -n "$FULLQA_DEPLOY_COMMIT" ]]; then
-        print_status "$YELLOW" "  deploy:fullqa commit: $FULLQA_DEPLOY_COMMIT"
+if [[ "$MR_MODE" == "main" ]]; then
+    if [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]]; then
+        print_status "$YELLOW" "Searching for deploy:fullqa job in commits containing source SHA..."
+        FULLQA_RESULT=$(find_deploy_job_status "fullqa" "$SOURCE_BRANCH_SHA" "deploy:fullqa" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>&1 | grep -v "Checking commit" | tail -1)
+        FULLQA_DEPLOY_STATUS=$(echo "$FULLQA_RESULT" | cut -d'|' -f1)
+        FULLQA_DEPLOY_COMMIT=$(echo "$FULLQA_RESULT" | cut -d'|' -f2)
+        print_status "$YELLOW" "  deploy:fullqa status: $FULLQA_DEPLOY_STATUS"
+        if [[ -n "$FULLQA_DEPLOY_COMMIT" ]]; then
+            print_status "$YELLOW" "  deploy:fullqa commit: $FULLQA_DEPLOY_COMMIT"
+        fi
     fi
-fi
 
-if [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
-    print_status "$YELLOW" "Searching for deploy:dev job in commits containing source SHA..."
-    DEVELOP_RESULT=$(find_deploy_job_status "develop" "$SOURCE_BRANCH_SHA" "deploy:dev" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>&1 | grep -v "Checking commit" | tail -1)
-    DEVELOP_DEPLOY_STATUS=$(echo "$DEVELOP_RESULT" | cut -d'|' -f1)
-    DEVELOP_DEPLOY_COMMIT=$(echo "$DEVELOP_RESULT" | cut -d'|' -f2)
-    print_status "$YELLOW" "  deploy:dev status: $DEVELOP_DEPLOY_STATUS"
-    if [[ -n "$DEVELOP_DEPLOY_COMMIT" ]]; then
-        print_status "$YELLOW" "  deploy:dev commit: $DEVELOP_DEPLOY_COMMIT"
+    if [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
+        print_status "$YELLOW" "Searching for deploy:dev job in commits containing source SHA..."
+        DEVELOP_RESULT=$(find_deploy_job_status "develop" "$SOURCE_BRANCH_SHA" "deploy:dev" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" 2>&1 | grep -v "Checking commit" | tail -1)
+        DEVELOP_DEPLOY_STATUS=$(echo "$DEVELOP_RESULT" | cut -d'|' -f1)
+        DEVELOP_DEPLOY_COMMIT=$(echo "$DEVELOP_RESULT" | cut -d'|' -f2)
+        print_status "$YELLOW" "  deploy:dev status: $DEVELOP_DEPLOY_STATUS"
+        if [[ -n "$DEVELOP_DEPLOY_COMMIT" ]]; then
+            print_status "$YELLOW" "  deploy:dev commit: $DEVELOP_DEPLOY_COMMIT"
+        fi
     fi
 fi
 
@@ -795,7 +924,7 @@ fi
 NOTIFY_USER="${GITLAB_USER_LOGIN:-}"
 
 # Build the comment message (using actual newlines)
-COMMENT_BODY="## Branch Deployment Verification
+COMMENT_BODY="## Branch Compliance Verification
 
 **Source Branch:** \`$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME\`
 **Source SHA:** \`${SOURCE_BRANCH_SHA:0:8}\`
@@ -845,45 +974,59 @@ else
     COMMENT_BODY+="- :warning: **Forbidden Merges**: Could not check for forbidden merges"$'\n'
 fi
 
-# Merge conflict check
-if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
-    COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: No conflicts between source and target branch"$'\n'
-elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
-    COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: Conflicts found, but only in manifest/package.xml (acceptable)"$'\n'
-elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
-    if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
-        # Format file names for display
-        file_list=""
-        IFS=',' read -ra FILES <<< "$MERGE_CONFLICT_FILES"
-        for file in "${FILES[@]}"; do
-            if [[ -n "$file_list" ]]; then
-                file_list+=", "
-            fi
-            file_list+="\`$file\`"
-        done
-        COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch (file(s): $file_list)"$'\n'
-    else
-        COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch"$'\n'
-    fi
+# Source lineage (branched from main vs develop/fullqa)
+if [[ "$SOURCE_ORIGIN_STATUS" == "clean" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Source from main**: No merge-into-develop/fullqa commits"$'\n'
+elif [[ "$SOURCE_ORIGIN_STATUS" == "branch_from_sandbox" ]]; then
+    commit_list=""
+    IFS=',' read -ra COMMITS <<< "$SOURCE_ORIGIN_COMMITS"
+    for c in "${COMMITS[@]}"; do
+        [[ -n "$commit_list" ]] && commit_list+=", "
+        commit_list+="\`${c:0:8}\`"
+    done
+    COMMENT_BODY+="- :x: **Source from main**: Contains merge(s) into develop/fullqa - likely branched from sandbox ($commit_list)"$'\n'
 else
-    COMMENT_BODY+="- :warning: **Merge Conflicts**: Could not check for merge conflicts"$'\n'
+    COMMENT_BODY+="- :warning: **Source from main**: Check could not be run"$'\n'
 fi
 
-# Production validation check
-if [[ "$PREDEPLOY_PRD_STATUS" == "success" ]]; then
-    COMMENT_BODY+="- :white_check_mark: **Production Validation**: test:predeploy:prd job passed"$'\n'
-elif [[ "$PREDEPLOY_PRD_STATUS" == "failed" ]]; then
-    COMMENT_BODY+="- :x: **Production Validation**: test:predeploy:prd job failed"$'\n'
-elif [[ "$PREDEPLOY_PRD_STATUS" == "running" || "$PREDEPLOY_PRD_STATUS" == "pending" ]]; then
-    COMMENT_BODY+="- :hourglass: **Production Validation**: test:predeploy:prd job in progress"$'\n'
-elif [[ "$PREDEPLOY_PRD_STATUS" == "job_not_found" ]]; then
-    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd job not found"$'\n'
-elif [[ "$PREDEPLOY_PRD_STATUS" == "no_pipeline" ]]; then
-    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd - no pipeline found"$'\n'
-elif [[ "$PREDEPLOY_PRD_STATUS" == "api_error" ]]; then
-    COMMENT_BODY+="- :warning: **Production Validation**: test:predeploy:prd - API error"$'\n'
+if [[ "$MR_MODE" == "main" ]]; then
+    if [[ "$MERGE_CONFLICT_STATUS" == "no_conflicts" ]]; then
+        COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: No conflicts between source and target branch"$'\n'
+    elif [[ "$MERGE_CONFLICT_STATUS" == "acceptable_conflicts" ]]; then
+        COMMENT_BODY+="- :white_check_mark: **Merge Conflicts**: Conflicts found, but only in manifest/package.xml (acceptable)"$'\n'
+    elif [[ "$MERGE_CONFLICT_STATUS" == "conflicts" ]]; then
+        if [[ -n "$MERGE_CONFLICT_FILES" ]]; then
+            file_list=""
+            IFS=',' read -ra FILES <<< "$MERGE_CONFLICT_FILES"
+            for file in "${FILES[@]}"; do
+                if [[ -n "$file_list" ]]; then
+                    file_list+=", "
+                fi
+                file_list+="\`$file\`"
+            done
+            COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch (file(s): $file_list)"$'\n'
+        else
+            COMMENT_BODY+="- :x: **Merge Conflicts**: Conflicts detected between source and target branch"$'\n'
+        fi
+    else
+        COMMENT_BODY+="- :warning: **Merge Conflicts**: Could not check for merge conflicts"$'\n'
+    fi
+fi
+
+if [[ "$PREDEPLOY_STATUS" == "success" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: Job passed"$'\n'
+elif [[ "$PREDEPLOY_STATUS" == "failed" ]]; then
+    COMMENT_BODY+="- :x: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: Job failed"$'\n'
+elif [[ "$PREDEPLOY_STATUS" == "running" || "$PREDEPLOY_STATUS" == "pending" ]]; then
+    COMMENT_BODY+="- :hourglass: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: In progress"$'\n'
+elif [[ "$PREDEPLOY_STATUS" == "job_not_found" ]]; then
+    COMMENT_BODY+="- :warning: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: Job not found"$'\n'
+elif [[ "$PREDEPLOY_STATUS" == "no_pipeline" ]]; then
+    COMMENT_BODY+="- :warning: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: No pipeline found"$'\n'
+elif [[ "$PREDEPLOY_STATUS" == "api_error" ]]; then
+    COMMENT_BODY+="- :warning: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: API error"$'\n'
 else
-    COMMENT_BODY+="- :question: **Production Validation**: test:predeploy:prd status unknown ($PREDEPLOY_PRD_STATUS)"$'\n'
+    COMMENT_BODY+="- :question: **Predeploy (\`$PREDEPLOY_JOB_NAME\`)**: Status unknown ($PREDEPLOY_STATUS)"$'\n'
 fi
 
 # Package.xml compliance check
@@ -969,7 +1112,27 @@ else
     COMMENT_BODY+="- :warning: **Package.xml Compliance**: Check status unknown"$'\n'
 fi
 
-# FullQA status
+# sfdx-git-delta vs manifest (recommendation only; does not fail the job)
+if [[ "$MANIFEST_DELTA_STATUS" == "aligned" ]]; then
+    COMMENT_BODY+="- :white_check_mark: **Manifest vs git delta** (\`sfdx-git-delta\`, constructive only): \`manifest/package.xml\` aligns with additive changes (\`CI_MERGE_REQUEST_DIFF_BASE_SHA\` → HEAD)"$'\n'
+elif [[ "$MANIFEST_DELTA_STATUS" == "warning" ]]; then
+    COMMENT_BODY+="- :bulb: **Manifest vs git delta** (recommendation): Declare in \`manifest/package.xml\` only metadata you actually changed (Add/Modify) so deploys stay minimal. Details below."$'\n'
+    if [[ -n "$MANIFEST_DELTA_EXCESS" ]]; then
+        EXCESS_SNIP=$(echo "$MANIFEST_DELTA_EXCESS" | cut -c1-500)
+        COMMENT_BODY+="  - **Listed in manifest but not in additive diff:** \`$EXCESS_SNIP\`"$'\n'
+    fi
+    if [[ -n "$MANIFEST_DELTA_MISSING" ]]; then
+        MISSING_SNIP=$(echo "$MANIFEST_DELTA_MISSING" | cut -c1-500)
+        COMMENT_BODY+="  - **In additive diff but not listed in manifest:** \`$MISSING_SNIP\`"$'\n'
+    fi
+elif [[ "$MANIFEST_DELTA_STATUS" == "error" ]]; then
+    ERR_SNIP=$(echo "$MANIFEST_DELTA_DETAIL" | tr '\n' ' ' | cut -c1-400)
+    COMMENT_BODY+="- :warning: **Manifest vs git delta**: Compare failed (sfdx-git-delta or parser). $ERR_SNIP"$'\n'
+else
+    COMMENT_BODY+="- :information_source: **Manifest vs git delta**: Skipped — ${MANIFEST_DELTA_DETAIL:-N/A}"$'\n'
+fi
+
+if [[ "$MR_MODE" == "main" ]]; then
 if [[ "$FULLQA_EXISTS" == "true" ]]; then
     if [[ "$FULLQA_MERGED" == "true" ]]; then
         if [[ "$FULLQA_DEPLOY_STATUS" == "success" ]]; then
@@ -1046,9 +1209,10 @@ else
     COMMENT_BODY+="- :warning: **develop**: Branch does not exist"$'\n'
     print_status "$YELLOW" "⚠ develop: Branch does not exist"
 fi
+fi
 
 COMMENT_BODY+=$'\n'"---"$'\n'
-COMMENT_BODY+="*This verification was performed automatically by the CI/CD pipeline.*"
+COMMENT_BODY+="*AI-Automated compliance check for $CI_MERGE_REQUEST_TARGET_BRANCH_NAME MRs. Fix issues before merging into $CI_MERGE_REQUEST_TARGET_BRANCH_NAME.*"
 if [[ -n "$NOTIFY_USER" ]]; then
     COMMENT_BODY+=$'\n\n'"cc @${NOTIFY_USER}"
 fi
@@ -1075,7 +1239,7 @@ if [[ "$NOTES_STATUS" -ge 200 && "$NOTES_STATUS" -lt 300 ]]; then
 
     if command -v jq &> /dev/null; then
         # Find notes containing our verification header (any author - resilient to bot token rotation)
-        NOTE_IDS=$(echo "$NOTES_BODY" | jq -r '.[] | select(.body | contains("Branch Deployment Verification")) | .id' 2>/dev/null | tr -d '\r' || echo "")
+        NOTE_IDS=$(echo "$NOTES_BODY" | jq -r '.[] | select(.body | contains("Branch Compliance Verification") or contains("Branch Deployment Verification") or contains("MR Branch Compliance (fullqa/develop)")) | .id' 2>/dev/null | tr -d '\r' || echo "")
 
         if [[ -n "$NOTE_IDS" ]]; then
             while IFS= read -r note_id; do
@@ -1154,17 +1318,18 @@ else
     exit 1
 fi
 
-# Summary
 print_status "$GREEN" "\n=== Verification Summary ==="
-if [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" && "$FULLQA_DEPLOY_STATUS" == "success" ]] && \
-   [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" && "$DEVELOP_DEPLOY_STATUS" == "success" ]]; then
-    print_status "$GREEN" "✓ All branches verified and deployed successfully!"
-    exit 0
-elif [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]] && \
-     [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
-    print_status "$YELLOW" "⚠ Branches merged but deployments may not be complete"
-    exit 0
+if [[ "$MR_MODE" == "main" ]]; then
+    if [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" && "$FULLQA_DEPLOY_STATUS" == "success" ]] && \
+       [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" && "$DEVELOP_DEPLOY_STATUS" == "success" ]]; then
+        print_status "$GREEN" "✓ All branches verified and deployed successfully!"
+    elif [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]] && \
+         [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
+        print_status "$YELLOW" "⚠ Branches merged but deployments may not be complete"
+    else
+        print_status "$YELLOW" "⚠ Some branches are not yet merged or deployed"
+    fi
 else
-    print_status "$YELLOW" "⚠ Some branches are not yet merged or deployed"
-    exit 0
+    print_status "$GREEN" "MR branch compliance check complete."
 fi
+exit 0
