@@ -30,6 +30,9 @@
 #   - ALFA_PROJECT_UUID       # your ALFA project UUID
 #   - ALFA_PAT_TOKEN          # PAT/API Secret from ALFA Portal (x-alfa-authorization)
 #
+# Optional:
+#   - METADATA_AUDIT_FAIL_ON_ALFA_ERROR=1  # exit the job if ALFA fails (default: warn and continue so Confluence uploads still run)
+#
 # Teams Tracked:
 #   q2c, leadz, sfxpro, storm, shield
 ################################################################################
@@ -45,6 +48,9 @@
 : "${ALFA_PROXY_URL:?Must set ALFA_PROXY_URL, e.g. https://alfa.gamma.qa.us-west-2.aws.avalara.io}"
 : "${ALFA_PROJECT_UUID:?Must set ALFA_PROJECT_UUID (ALFA project UUID)}"
 : "${ALFA_PAT_TOKEN:?Must set ALFA_PAT_TOKEN (PAT/API Secret from ALFA Portal)}"
+
+# Avoid double slashes in API URL when CI variables include a trailing slash
+ALFA_PROXY_URL="${ALFA_PROXY_URL%/}"
 
 # --- ALFA helper: call LLM via OpenAI-compatible /v1/chat/completions ---------
 
@@ -92,7 +98,10 @@ EOF
         )
       }
     ]
-  }')
+  }') || {
+    echo "ERROR: jq failed building ALFA request payload for team '${team}' (check diff/manifest size and UTF-8)."
+    return 1
+  }
 
   # Call ALFA and capture both body and HTTP status
   local response http_code body
@@ -111,24 +120,31 @@ EOF
 
   if [[ "$http_code" != "200" ]]; then
     echo "ERROR: ALFA returned HTTP $http_code for team '${team}'"
-    echo "ALFA response body:"
-    echo "$body"
+    echo "ALFA response body (first 4k):"
+    printf '%s' "$body" | head -c 4096
+    echo
     return 1
   fi
 
-  # Parse LLM response
-  if ! printf '%s\n' "$body" | jq -r '.choices[0].message.content' > "$out_file"; then
-    echo "ERROR: Failed to parse ALFA response for team '${team}'"
-    echo "Raw body was:"
-    echo "$body"
+  # Parse LLM response (OpenAI-compatible shape)
+  if ! printf '%s' "$body" | jq -e . >/dev/null 2>&1; then
+    echo "ERROR: ALFA returned HTTP 200 but body is not valid JSON for team '${team}'"
+    printf '%s' "$body" | head -c 4096
+    echo
     return 1
   fi
 
-  if [[ ! -s "$out_file" ]]; then
-    echo "WARNING: Empty summary generated for team '${team}'"
-  else
-    echo "AI summary written to ${out_file}"
+  local content
+  content=$(printf '%s' "$body" | jq -r '.choices[0].message.content // empty')
+  if [[ -z "$content" ]]; then
+    echo "ERROR: ALFA JSON had no .choices[0].message.content for team '${team}'"
+    printf '%s' "$body" | head -c 4096
+    echo
+    return 1
   fi
+
+  printf '%s\n' "$content" > "$out_file"
+  echo "AI summary written to ${out_file}"
 }
 
 # --- Git setup ----------------------------------------------------------------
@@ -199,9 +215,15 @@ for team in "${!teams[@]}"; do
     continue
   fi
 
-  # Generate AI summary using git diff + combined manifest (if we had any commits)
+  # Generate AI summary using git diff + combined manifest (if we had any commits).
+  # Use "if ! ..." so a failed summary does not abort the whole script under "set -e" (e.g. GitLab CI).
   if [[ -s "$diff_file" ]]; then
-    generate_ai_summary "$team" "$timestamp" "$diff_file" "$manifest_file" "$summary_file"
+    if ! generate_ai_summary "$team" "$timestamp" "$diff_file" "$manifest_file" "$summary_file"; then
+      echo "WARNING: ALFA AI summary failed for team '${team}'. Manifest will still upload. Check ALFA_PROXY_URL, ALFA_PROJECT_UUID, ALFA_PAT_TOKEN, and gateway reachability from the runner." >&2
+      if [[ "${METADATA_AUDIT_FAIL_ON_ALFA_ERROR:-}" == "1" ]]; then
+        exit 1
+      fi
+    fi
   else
     echo "No matching merge commits found for team ${team} in the last week; skipping AI summary."
     # Still upload manifest so the week is tracked even if no AI summary
