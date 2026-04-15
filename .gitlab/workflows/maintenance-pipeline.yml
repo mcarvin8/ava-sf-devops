@@ -156,7 +156,7 @@ pipelineCleanup:
     - aws,prd,us-west-2
 
 ####################################################
-# Create a delta manifest file for metadata audits.
+# Weekly metadata audit: AI summaries (sf-git-ai-meta-insights + ALFA) to Confluence.
 ####################################################
 metadataAudit:
   stage: maintenance
@@ -167,7 +167,7 @@ metadataAudit:
     - when: never
   allow_failure: false
   script:
-    - echo y | sf plugins install sf-package-combiner@latest
+    - echo y | sf plugins install sf-git-ai-meta-insights@latest
     - source ./scripts/bash/metadata_audit.sh
   tags: 
     - aws,prd,us-west-2
