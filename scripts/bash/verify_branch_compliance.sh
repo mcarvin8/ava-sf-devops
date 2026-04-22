@@ -919,6 +919,236 @@ if [[ "$MR_MODE" == "main" ]]; then
     fi
 fi
 
+# ============================================================================
+# RELEASE BRANCH — PER-STORY DEPLOYMENT VERIFICATION
+# ============================================================================
+# A release branch is any branch that contains merge commits bringing story
+# branches INTO it. We support multiple creation styles:
+#   - create_release_branch.sh             : "Merging <story> into <release>"
+#   - git CLI / VS Code (default)          : "Merge branch '<story>' into <release>"
+#   - git CLI remote-tracking              : "Merge remote-tracking branch 'origin/<story>' into <release>"
+#   - merging into main/master on CLI      : "Merge branch '<story>'"          (no "into" clause)
+#   - GitHub-style PR merge                : "Merge pull request #N from user/<story>"
+#
+# Detection: scan ALL merge commits on the first-parent path from the main-
+# merge-base to the source HEAD. Each such commit is, by construction, a
+# merge INTO this branch, so we only need the **second parent** as the story
+# HEAD. The subject line is used on a best-effort basis to recover a human-
+# readable story name; when we can't parse it we fall back to the short SHA.
+#
+# Fast-forward merges (no merge commit) and squash merges cannot be detected
+# because no merge commit exists to recover the story HEAD from.
+#
+# If every story HEAD discovered this way was deployed successfully to fullqa
+# and develop individually, the release branch is considered compliant even
+# if the release-branch HEAD itself was never pushed backwards to those envs.
+
+RELEASE_STORIES=()               # story branch names (best-effort, for display)
+RELEASE_STORY_SHAS=()            # story HEAD commit SHAs (authoritative)
+RELEASE_STORY_FULLQA=()          # per-story fullqa deploy status
+RELEASE_STORY_FULLQA_COMMIT=()   # per-story commit where fullqa deploy was found
+RELEASE_STORY_DEVELOP=()         # per-story develop deploy status
+RELEASE_STORY_DEVELOP_COMMIT=()  # per-story commit where develop deploy was found
+
+IS_RELEASE_BRANCH=false
+
+# Helper: parse a merge commit's subject line and echo "<story_name>|<release_name>"
+# where either part may be empty if it cannot be determined.
+parse_merge_subject() {
+    local msg=$1
+    local story=""
+    local release=""
+
+    if [[ "$msg" =~ ^Merging[[:space:]]+(.+)[[:space:]]+into[[:space:]]+([^[:space:]\'\"]+)[[:space:]]*$ ]]; then
+        # create_release_branch.sh format
+        story="${BASH_REMATCH[1]}"
+        release="${BASH_REMATCH[2]}"
+    elif [[ "$msg" =~ ^Merge[[:space:]]+remote-tracking[[:space:]]+branch[[:space:]]+[\'\"]([^\'\"]+)[\'\"][[:space:]]+into[[:space:]]+[\'\"]?([^\'\"[:space:]]+)[\'\"]?[[:space:]]*$ ]]; then
+        # git CLI when merging a remote-tracking branch
+        story="${BASH_REMATCH[1]}"
+        release="${BASH_REMATCH[2]}"
+    elif [[ "$msg" =~ ^Merge[[:space:]]+branch[[:space:]]+[\'\"]([^\'\"]+)[\'\"][[:space:]]+into[[:space:]]+[\'\"]?([^\'\"[:space:]]+)[\'\"]?[[:space:]]*$ ]]; then
+        # git CLI / VS Code default when target != main/master
+        story="${BASH_REMATCH[1]}"
+        release="${BASH_REMATCH[2]}"
+    elif [[ "$msg" =~ ^Merge[[:space:]]+branch[[:space:]]+[\'\"]([^\'\"]+)[\'\"] ]]; then
+        # git CLI default when target IS main/master (no "into" clause)
+        story="${BASH_REMATCH[1]}"
+    elif [[ "$msg" =~ ^Merge[[:space:]]+pull[[:space:]]+request[[:space:]]+\#[0-9]+[[:space:]]+from[[:space:]]+[^[:space:]/]+/([^[:space:]]+) ]]; then
+        # GitHub-style PR merge
+        story="${BASH_REMATCH[1]}"
+    fi
+
+    echo "${story}|${release}"
+}
+
+if [[ "$MR_MODE" == "main" ]]; then
+    RELEASE_DETECT_BASE="${BRANCH_MERGE_BASE_SHA:-${CI_MERGE_REQUEST_DIFF_BASE_SHA:-}}"
+
+    if [[ -n "$RELEASE_DETECT_BASE" ]]; then
+        RELEASE_DETECT_RANGE="${RELEASE_DETECT_BASE}..${SOURCE_BRANCH_SHA}"
+        print_status "$YELLOW" "Checking if source is a release branch (scanning first-parent merge commits in ${RELEASE_DETECT_RANGE:0:60})..."
+
+        # All merge commits on the first-parent path of the release branch.
+        # --first-parent ensures we don't descend into a merged-in story's own
+        # internal merge history (which would produce false positives).
+        STORY_MERGE_COMMITS=$(git log --first-parent --merges --format="%H" \
+            "$RELEASE_DETECT_RANGE" 2>/dev/null || echo "")
+
+        while IFS= read -r merge_sha; do
+            [[ -z "$merge_sha" ]] && continue
+
+            # Second parent = story HEAD at the time of the merge.
+            story_sha=$(git rev-parse "${merge_sha}^2" 2>/dev/null || echo "")
+            [[ -z "$story_sha" ]] && continue
+
+            merge_msg=$(git log -1 --format="%s" "$merge_sha" 2>/dev/null || echo "")
+
+            parsed=$(parse_merge_subject "$merge_msg")
+            story_branch="${parsed%%|*}"
+            release_part="${parsed##*|}"
+
+            # Strip optional origin/ prefix on either side
+            story_branch="${story_branch#origin/}"
+            release_part_stripped="${release_part#origin/}"
+
+            # If the subject includes an "into <release>" clause, verify it
+            # points at THIS release branch; a mismatch most likely means a
+            # cross-branch merge got pulled in via some other path and we
+            # shouldn't attribute it here.
+            if [[ -n "$release_part_stripped" && \
+                  "$release_part_stripped" != "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" ]]; then
+                continue
+            fi
+
+            # Skip non-story merges. Several patterns are NOT story merges and
+            # must never populate RELEASE_STORIES:
+            #   (1) sync-from-upstream: "Merge branch 'main' into <release>"
+            #       — developer keeping the release branch current against main
+            #       (develop/fullqa are covered here too; they're also policy-
+            #       forbidden via check_forbidden_merges but we still filter
+            #       them so we don't try to deploy-verify them as stories)
+            #   (2) self-merge / divergence reconciliation:
+            #       "Merge branch '<release>' into <release>"
+            #       "Merge remote-tracking branch 'origin/<release>' into <release>"
+            #       — e.g. `git pull` on a release branch with local + remote
+            #       commits; the second parent is a divergent tip of the SAME
+            #       branch, not a story.
+            #
+            # We apply filters in three layers:
+            #   (a) name equals this release branch    -> self-merge
+            #   (b) name is a protected/long-lived env -> sync merge
+            #   (c) ancestry: second parent already on origin/<default-branch>
+            #       -> authoritative catch for anonymous / renamed / parse-failed
+            #          cases, including forks of main that have since been merged
+            story_branch_lower=$(echo "$story_branch" | tr '[:upper:]' '[:lower:]')
+            source_branch_lower=$(echo "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" | tr '[:upper:]' '[:lower:]')
+            default_branch_lower=$(echo "$CI_DEFAULT_BRANCH" | tr '[:upper:]' '[:lower:]')
+
+            if [[ "$story_branch_lower" == "$source_branch_lower" ]]; then
+                # Self-merge of the release branch into itself (divergence
+                # reconciliation, e.g. `git pull` with local+remote commits).
+                continue
+            fi
+            case "$story_branch_lower" in
+                main|master|develop|fullqa|"$default_branch_lower")
+                    continue
+                    ;;
+            esac
+            if git show-ref --verify --quiet "refs/remotes/origin/$CI_DEFAULT_BRANCH" && \
+               git merge-base --is-ancestor "$story_sha" "origin/$CI_DEFAULT_BRANCH" 2>/dev/null; then
+                # The "story" HEAD is already contained in the default branch,
+                # so this merge was actually main → release, not a story merge.
+                continue
+            fi
+
+            # If we couldn't recover a story name (squash-style message, etc.),
+            # fall back to the short SHA so the line still shows up.
+            if [[ -z "$story_branch" ]]; then
+                story_branch="unknown-${story_sha:0:8}"
+            fi
+
+            # De-duplicate by story name (a story could be merged twice).
+            already_seen=false
+            if [[ ${#RELEASE_STORIES[@]} -gt 0 ]]; then
+                for existing in "${RELEASE_STORIES[@]}"; do
+                    if [[ "$existing" == "$story_branch" ]]; then
+                        already_seen=true
+                        break
+                    fi
+                done
+            fi
+            if [[ "$already_seen" == "true" ]]; then
+                continue
+            fi
+
+            RELEASE_STORIES+=("$story_branch")
+            RELEASE_STORY_SHAS+=("$story_sha")
+        done <<< "$STORY_MERGE_COMMITS"
+
+        if [[ ${#RELEASE_STORIES[@]} -gt 0 ]]; then
+            IS_RELEASE_BRANCH=true
+            print_status "$GREEN" "✓ Source branch identified as a release branch (${#RELEASE_STORIES[@]} story branch(es) merged in)"
+        else
+            print_status "$YELLOW" "Source branch is not a release branch (no first-parent merge commits found in range)"
+        fi
+    else
+        print_status "$YELLOW" "⚠ Cannot determine release-branch range (no merge-base with default branch); skipping per-story checks"
+    fi
+
+    # Verify per-story deployments
+    if [[ "$IS_RELEASE_BRANCH" == "true" ]]; then
+        for i in "${!RELEASE_STORIES[@]}"; do
+            story_name="${RELEASE_STORIES[$i]}"
+            story_sha="${RELEASE_STORY_SHAS[$i]}"
+
+            print_status "$YELLOW" "  → Verifying deploys for story branch '$story_name' (${story_sha:0:8})"
+
+            # --- fullqa ---
+            story_fullqa_status=""
+            story_fullqa_commit=""
+            if git show-ref --verify --quiet "refs/remotes/origin/fullqa" && \
+               git merge-base --is-ancestor "$story_sha" "origin/fullqa" 2>/dev/null; then
+                RES=$(find_deploy_job_status "fullqa" "$story_sha" "deploy:fullqa" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$story_name" 2>&1 | grep -v "Checking commit" | tail -1)
+                story_fullqa_status=$(echo "$RES" | cut -d'|' -f1)
+                story_fullqa_commit=$(echo "$RES" | cut -d'|' -f2)
+            else
+                story_fullqa_status="not_merged"
+            fi
+            RELEASE_STORY_FULLQA+=("$story_fullqa_status")
+            RELEASE_STORY_FULLQA_COMMIT+=("$story_fullqa_commit")
+
+            # --- develop ---
+            story_dev_status=""
+            story_dev_commit=""
+            if git show-ref --verify --quiet "refs/remotes/origin/develop" && \
+               git merge-base --is-ancestor "$story_sha" "origin/develop" 2>/dev/null; then
+                RES=$(find_deploy_job_status "develop" "$story_sha" "deploy:dev" "$MAINTAINER_PAT_VALUE" "$CI_PROJECT_ID" "$CI_SERVER_HOST" "$story_name" 2>&1 | grep -v "Checking commit" | tail -1)
+                story_dev_status=$(echo "$RES" | cut -d'|' -f1)
+                story_dev_commit=$(echo "$RES" | cut -d'|' -f2)
+            else
+                story_dev_status="not_merged"
+            fi
+            RELEASE_STORY_DEVELOP+=("$story_dev_status")
+            RELEASE_STORY_DEVELOP_COMMIT+=("$story_dev_commit")
+
+            print_status "$YELLOW" "    [$story_name] fullqa=${story_fullqa_status:-?} dev=${story_dev_status:-?}"
+        done
+    fi
+fi
+
+# Aggregate: did every story deploy successfully to both lower envs?
+ALL_STORIES_DEPLOYED=false
+if [[ "$IS_RELEASE_BRANCH" == "true" && ${#RELEASE_STORIES[@]} -gt 0 ]]; then
+    ALL_STORIES_DEPLOYED=true
+    for i in "${!RELEASE_STORIES[@]}"; do
+        if [[ "${RELEASE_STORY_FULLQA[$i]}" != "success" || "${RELEASE_STORY_DEVELOP[$i]}" != "success" ]]; then
+            ALL_STORIES_DEPLOYED=false
+            break
+        fi
+    done
+fi
+
 # Use pipeline trigger user for @-mention (GitLab notifies mentioned users)
 # GITLAB_USER_LOGIN: username of user who started the pipeline (or manual job)
 NOTIFY_USER="${GITLAB_USER_LOGIN:-}"
@@ -1209,6 +1439,90 @@ else
     COMMENT_BODY+="- :warning: **develop**: Branch does not exist"$'\n'
     print_status "$YELLOW" "⚠ develop: Branch does not exist"
 fi
+
+# --- Release branch: per-story deployment breakdown ---
+if [[ "$IS_RELEASE_BRANCH" == "true" ]]; then
+    COMMENT_BODY+=$'\n'"### Release Branch — Story Branch Deployment Verification"$'\n'
+    COMMENT_BODY+="Source branch appears to be a release branch. Each story branch merged in is verified individually below."$'\n'
+    COMMENT_BODY+="> If every story branch was deployed successfully to fullqa and develop, the release branch itself does **not** need to be deployed backwards to those envs."$'\n\n'
+
+    if [[ "$ALL_STORIES_DEPLOYED" == "true" ]]; then
+        COMMENT_BODY+="- :white_check_mark: **All ${#RELEASE_STORIES[@]} story branch(es) deployed successfully to fullqa and develop**"$'\n'
+    else
+        COMMENT_BODY+="- :warning: **Not all story branches are successfully deployed to fullqa and develop (see details below)**"$'\n'
+    fi
+
+    for i in "${!RELEASE_STORIES[@]}"; do
+        story_name="${RELEASE_STORIES[$i]}"
+        story_sha="${RELEASE_STORY_SHAS[$i]}"
+        fq_status="${RELEASE_STORY_FULLQA[$i]}"
+        fq_commit="${RELEASE_STORY_FULLQA_COMMIT[$i]}"
+        dv_status="${RELEASE_STORY_DEVELOP[$i]}"
+        dv_commit="${RELEASE_STORY_DEVELOP_COMMIT[$i]}"
+
+        COMMENT_BODY+="- **\`$story_name\`** (story HEAD: \`${story_sha:0:8}\`)"$'\n'
+
+        # fullqa line
+        case "$fq_status" in
+            success)
+                if [[ -n "$fq_commit" ]]; then
+                    COMMENT_BODY+="  - :white_check_mark: **fullqa**: Deployed successfully (commit: \`${fq_commit:0:8}\`)"$'\n'
+                else
+                    COMMENT_BODY+="  - :white_check_mark: **fullqa**: Deployed successfully"$'\n'
+                fi
+                ;;
+            failed)
+                if [[ -n "$fq_commit" ]]; then
+                    COMMENT_BODY+="  - :x: **fullqa**: Deployment failed (commit: \`${fq_commit:0:8}\`)"$'\n'
+                else
+                    COMMENT_BODY+="  - :x: **fullqa**: Deployment failed"$'\n'
+                fi
+                ;;
+            running|pending)
+                COMMENT_BODY+="  - :hourglass: **fullqa**: Deployment in progress"$'\n'
+                ;;
+            not_merged)
+                COMMENT_BODY+="  - :x: **fullqa**: Story HEAD not merged into fullqa"$'\n'
+                ;;
+            job_not_found|no_pipeline)
+                COMMENT_BODY+="  - :warning: **fullqa**: Deploy job not found for any ancestor commit"$'\n'
+                ;;
+            *)
+                COMMENT_BODY+="  - :question: **fullqa**: Deploy status unknown (${fq_status:-?})"$'\n'
+                ;;
+        esac
+
+        # develop line
+        case "$dv_status" in
+            success)
+                if [[ -n "$dv_commit" ]]; then
+                    COMMENT_BODY+="  - :white_check_mark: **develop**: Deployed successfully (commit: \`${dv_commit:0:8}\`)"$'\n'
+                else
+                    COMMENT_BODY+="  - :white_check_mark: **develop**: Deployed successfully"$'\n'
+                fi
+                ;;
+            failed)
+                if [[ -n "$dv_commit" ]]; then
+                    COMMENT_BODY+="  - :x: **develop**: Deployment failed (commit: \`${dv_commit:0:8}\`)"$'\n'
+                else
+                    COMMENT_BODY+="  - :x: **develop**: Deployment failed"$'\n'
+                fi
+                ;;
+            running|pending)
+                COMMENT_BODY+="  - :hourglass: **develop**: Deployment in progress"$'\n'
+                ;;
+            not_merged)
+                COMMENT_BODY+="  - :x: **develop**: Story HEAD not merged into develop"$'\n'
+                ;;
+            job_not_found|no_pipeline)
+                COMMENT_BODY+="  - :warning: **develop**: Deploy job not found for any ancestor commit"$'\n'
+                ;;
+            *)
+                COMMENT_BODY+="  - :question: **develop**: Deploy status unknown (${dv_status:-?})"$'\n'
+                ;;
+        esac
+    done
+fi
 fi
 
 COMMENT_BODY+=$'\n'"---"$'\n'
@@ -1320,14 +1634,32 @@ fi
 
 print_status "$GREEN" "\n=== Verification Summary ==="
 if [[ "$MR_MODE" == "main" ]]; then
+    RELEASE_HEAD_DEPLOYED=false
     if [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" && "$FULLQA_DEPLOY_STATUS" == "success" ]] && \
        [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" && "$DEVELOP_DEPLOY_STATUS" == "success" ]]; then
-        print_status "$GREEN" "✓ All branches verified and deployed successfully!"
-    elif [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]] && \
-         [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
-        print_status "$YELLOW" "⚠ Branches merged but deployments may not be complete"
+        RELEASE_HEAD_DEPLOYED=true
+    fi
+
+    if [[ "$IS_RELEASE_BRANCH" == "true" ]]; then
+        # For release branches the HEAD does not have to be deployed backwards
+        # if every individual story branch was already deployed to both envs.
+        if [[ "$RELEASE_HEAD_DEPLOYED" == "true" ]]; then
+            print_status "$GREEN" "✓ Release branch and all lower-env deployments verified successfully!"
+        elif [[ "$ALL_STORIES_DEPLOYED" == "true" ]]; then
+            print_status "$GREEN" "✓ All ${#RELEASE_STORIES[@]} story branch(es) deployed successfully to fullqa and develop"
+            print_status "$GREEN" "  Release branch HEAD is not required to be deployed to lower envs."
+        else
+            print_status "$YELLOW" "⚠ Release branch: some story branches are not yet deployed successfully to fullqa/develop"
+        fi
     else
-        print_status "$YELLOW" "⚠ Some branches are not yet merged or deployed"
+        if [[ "$RELEASE_HEAD_DEPLOYED" == "true" ]]; then
+            print_status "$GREEN" "✓ All branches verified and deployed successfully!"
+        elif [[ "$FULLQA_EXISTS" == "true" && "$FULLQA_MERGED" == "true" ]] && \
+             [[ "$DEVELOP_EXISTS" == "true" && "$DEVELOP_MERGED" == "true" ]]; then
+            print_status "$YELLOW" "⚠ Branches merged but deployments may not be complete"
+        else
+            print_status "$YELLOW" "⚠ Some branches are not yet merged or deployed"
+        fi
     fi
 else
     print_status "$GREEN" "MR branch compliance check complete."
