@@ -1,0 +1,52 @@
+# Build context for this repo’s Dockerfile is tooling-only (no COPY of project source).
+# Excluding heavy paths speeds up `docker build` when the context is the repo root.
+# If you later add COPY steps, trim or adjust these rules so required paths stay in context.
+
+# Version control (often the largest part of the tarball)
+.git
+.gitattributes
+
+# Salesforce project / metadata (not used in the current image)
+force-app/
+manifest/
+
+# Reports, local tooling output
+hardis-report/
+coverage/
+coverage-*.xml
+logs/
+*.log
+
+# Dependencies and caches
+node_modules/
+.sfdx/
+.sf/
+.localdevserver/
+.eslintcache
+.pmdCache
+__pycache__/
+*.py[cod]
+.pdm.toml
+.pdm-python
+
+# Package / destructive delta artifacts
+package/
+destructive/
+destructiveChanges/
+pmd-bin-*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Misc (matches .gitignore)
+IlluminatedCloud/
+.illuminatedCloud/
+config/user
+**/scripts/soql/query-results
+**/lwc/jsconfig.json
