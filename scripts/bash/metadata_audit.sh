@@ -63,7 +63,7 @@ fi
 # When debugging in Bash, print with: printf '%s\n' "$LLM_DEFAULT_HEADERS"
 # Do not use: echo $LLM_DEFAULT_HEADERS  (unquoted — JSON starts with { and Bash applies brace expansion)
 export LLM_DEFAULT_HEADERS
-LLM_DEFAULT_HEADERS="$(jq -nc --arg rbac "$ALFA_PAT_TOKEN" --arg uuid "$ALFA_PROJECT_UUID" '{"x-alfa-rbac": $rbac, "Authorization": ("sk-" + $uuid)}')"
+LLM_DEFAULT_HEADERS="$(jq -nc --arg rbac "$ALFA_PAT_TOKEN" --arg uuid "$ALFA_PROJECT_UUID" '{"x-alfa-authorization": $rbac, "Authorization": ("Bearer sk-" + $uuid)}')"
 
 METADATA_AUDIT_TO="${METADATA_AUDIT_TO:-origin/main}"
 
@@ -113,7 +113,7 @@ for team in q2c leadz sfxpro storm shield avatechtdr; do
     --to "$METADATA_AUDIT_TO" \
     --commit-message-include "$jira_regex" \
     --team "$team" \
-    --output "$summary_file" \
+    --output "$summary_file" --ignore-whitespace \
     --model "o4-mini"; then
     echo "WARNING: sf sgai metadata summarize failed for team '${team}'." >&2
     if [[ "${METADATA_AUDIT_FAIL_ON_ALFA_ERROR:-}" == "1" ]]; then
@@ -133,7 +133,6 @@ for team in q2c leadz sfxpro storm shield avatechtdr; do
     -H "X-Atlassian-Token: nocheck" \
     -F "file=@${summary_file}" \
     -F 'minorEdit=true' \
-    -F "comment=metadata_audit ${timestamp} ${team} AI summary (sf-git-ai-meta-insights); type=text/plain; charset=utf-8" \
     "https://avalara.atlassian.net/wiki/rest/api/content/${CONFLUENCE_PAGE_ID}/child/attachment" \
     >/dev/null || echo "WARNING: Failed to upload ${summary_file} for team ${team}"
 done
