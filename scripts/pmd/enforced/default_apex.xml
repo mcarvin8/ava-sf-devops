@@ -12,4 +12,6 @@
    <rule ref="category/apex/performance.xml/AvoidDebugStatements" message="Avoid debug statements">
       <priority>3</priority>
    </rule>
+   <rule ref="category/apex/bestpractices.xml/UnusedLocalVariable" />
+   <rule ref="category/apex/design.xml/UnusedMethod" />
 </ruleset>
