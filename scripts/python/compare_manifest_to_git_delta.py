@@ -11,9 +11,17 @@ STATUS is one of: aligned, warning, error
 """
 import sys
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Iterable, List, Set, Tuple
 
 NS = "http://soap.sforce.com/2006/04/metadata"
+
+# Salesforce metadata-type names are treated case-insensitively by the Metadata API
+# (e.g. GenAIPromptTemplate vs GenAiPromptTemplate are accepted as the same type),
+# but tools disagree on the canonical casing. sfdx-git-delta uses the casing from
+# metadataRegistry.json while developers often follow the casing in Salesforce docs.
+# Normalize on the type name so we don't false-flag the same member twice.
+def _norm_type(tname: str) -> str:
+    return tname.lower()
 
 
 def _q(tag: str) -> str:
@@ -44,20 +52,28 @@ def parse_package(path: str) -> Tuple[Dict[str, List[str]], Set[str]]:
     return out, star_types
 
 
-def pairs_from_pkg(pkg: Dict[str, List[str]], star: Set[str]) -> Set[Tuple[str, str]]:
-    s: Set[Tuple[str, str]] = set()
+def pairs_from_pkg(
+    pkg: Dict[str, List[str]], star: Set[str]
+) -> Dict[Tuple[str, str], str]:
+    """Return {(type_lower, member) -> "OriginalType:Member"} for case-insensitive
+    set ops on the key while preserving the package's original casing for display."""
+    star_norm = {_norm_type(s) for s in star}
+    out: Dict[Tuple[str, str], str] = {}
     for tname, members in pkg.items():
-        if tname in star:
+        if _norm_type(tname) in star_norm:
             continue
         for m in members:
-            s.add((tname, m))
-    return s
+            key = (_norm_type(tname), m)
+            # First write wins; both packages within themselves should already be
+            # internally consistent on casing, so this is fine.
+            out.setdefault(key, f"{tname}:{m}")
+    return out
 
 
-def fmt_pairs(pairs: Set[Tuple[str, str]], limit: int = 40) -> str:
-    if not pairs:
+def fmt_pairs(displays: Iterable[str], limit: int = 40) -> str:
+    items = sorted(displays)
+    if not items:
         return ""
-    items = sorted(f"{a}:{b}" for a, b in pairs)
     if len(items) > limit:
         return "; ".join(items[:limit]) + f"; … (+{len(items) - limit} more)"
     return "; ".join(items)
@@ -85,28 +101,27 @@ def main() -> None:
         print(str(e), file=sys.stderr)
         return
 
-    delta_pairs = pairs_from_pkg(delta_pkg, delta_star)
-    man_pairs = pairs_from_pkg(man_pkg, man_star)
+    delta_map = pairs_from_pkg(delta_pkg, delta_star)
+    man_map = pairs_from_pkg(man_pkg, man_star)
 
-    # Excess: declared in manifest but not in additive git delta
-    excess = set()
-    for pair in man_pairs:
-        if pair not in delta_pairs:
-            excess.add(pair)
+    delta_keys = set(delta_map.keys())
+    man_keys = set(man_map.keys())
+    man_star_norm = {_norm_type(s) for s in man_star}
 
-    # Missing: in delta but not covered by manifest (ignore types fully wildcarded in manifest)
-    missing = set()
-    for pair in delta_pairs:
-        t, _ = pair
-        if t in man_star:
-            continue
-        if pair not in man_pairs:
-            missing.add(pair)
+    # Excess: declared in manifest but not in additive git delta.
+    # Use the manifest's display casing so the MR comment matches what the dev wrote.
+    excess_displays = {man_map[k] for k in (man_keys - delta_keys)}
 
-    if excess or missing:
+    # Missing: in delta but not covered by manifest. Skip types fully wildcarded
+    # in the manifest. Use the delta's display casing (it's what sgd would suggest).
+    missing_displays = {
+        delta_map[k] for k in (delta_keys - man_keys) if k[0] not in man_star_norm
+    }
+
+    if excess_displays or missing_displays:
         print("warning", file=sys.stdout)
-        print(fmt_pairs(excess), file=sys.stdout)
-        print(fmt_pairs(missing), file=sys.stdout)
+        print(fmt_pairs(excess_displays), file=sys.stdout)
+        print(fmt_pairs(missing_displays), file=sys.stdout)
     else:
         print("aligned", file=sys.stdout)
         print("", file=sys.stdout)
